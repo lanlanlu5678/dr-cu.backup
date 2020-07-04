@@ -133,6 +133,9 @@ CostT RouteGrid::getEdgeVioCost(const GridEdge& edge, const int netIdx, bool his
         return getWrongWayWireSegmentVioCost({edge}, netIdx, histCost);
     } else {
         log() << "Warning in RouteGrid::getEdgeVioCost: invalid edge type" << std::endl;
+        // pp : debug
+        log() << "net : " << netIdx << ";   u : " << edge.u.layerIdx << "," << edge.u.trackIdx << "," << edge.u.crossPointIdx << ","
+                << edge.v.layerIdx << "," << edge.v.trackIdx << "," << edge.v.crossPointIdx << "\n";
         return 0;
     }
 }
@@ -1273,7 +1276,7 @@ void RouteGrid::fadeHistCost(const vector<int>& exceptedNets) {
     }
     std::unordered_set<int> exceptedNetSet;
     for (int netIdx : exceptedNets) exceptedNetSet.insert(netIdx);
-    std::map<CostT, int> histWireUsage, histViaUsage;
+    // std::map<CostT, int> histWireUsage, histViaUsage;
     for (int layerIdx = 0; layerIdx < getLayerNum(); ++layerIdx) {
         for (int trackIdx = 0; trackIdx < layers[layerIdx].numTracks(); ++trackIdx) {
             // wire

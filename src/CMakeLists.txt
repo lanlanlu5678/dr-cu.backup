@@ -81,10 +81,11 @@ include_directories(${PATH_ISPD18})
 #################
 
 # TODO: set static under release mode only
-set_target_properties(ispd19dr PROPERTIES LINK_FLAGS "-static -Wl,--whole-archive -rdynamic -lpthread -Wl,--no-whole-archive")
+# set_target_properties(ispd19dr PROPERTIES LINK_FLAGS "-static -Wl,--whole-archive -rdynamic -lpthread -Wl,--no-whole-archive")
 
 # Threads
-# target_link_libraries(ispd19dr ${CMAKE_THREAD_LIBS_INIT})
+find_package(Threads)
+target_link_libraries(ispd19dr ${CMAKE_THREAD_LIBS_INIT})
 
 # LEF/DEF
 target_link_libraries(ispd19dr lef)

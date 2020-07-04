@@ -56,6 +56,12 @@ public:
     vector<DefWireSegmentDscp> defWireSegments;
     void clearPostRouteResult();
     void clearResult();
+
+    // partial ripup
+    // index in the outer vector is pseudoNetIdx, in the inner vector is pinIdx with root->0;
+    // vector<int> vioGuides;
+    vector<vector<std::shared_ptr<GridSteiner>>> pinsOfPseudoNets;
+    // vector<vector<int>> linesOfPseudoNets;
 };
 
 class NetList {

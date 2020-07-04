@@ -174,3 +174,36 @@ int LocalNet::getCrossPointPenalty(int guideIdx, int trackIdx, int cpIdx) const 
     }
     return 1;
 }
+
+void LocalNet::makePseudo() {
+
+    auto &pins = dbNet.pinsOfPseudoNets[pseudoNetIdx];
+    vector<vector<db::GridBoxOnLayer>> oriGridPins;
+    
+    pinAccessBoxes.clear();
+    pinAccessBoxes.resize(pins.size());
+    oriGridPins = std::move(gridPinAccessBoxes);
+    gridPinAccessBoxes.clear();
+    gridPinAccessBoxes.resize(pins.size());
+
+    // init (gird)PinAccessBoxes
+    // the position of start pin fix now, as it may incurr mis-match
+    gridPinAccessBoxes[0].push_back({pins[0]->layerIdx, utils::IntervalT<int>(pins[0]->trackIdx), utils::IntervalT<int>(pins[0]->crossPointIdx)});
+    pinAccessBoxes[0].push_back(database.getLoc(gridPinAccessBoxes[0][0]));
+
+    for (int i=1; i<pins.size(); i++) {
+        if (pins[i]->pinIdx < 0) {
+            gridPinAccessBoxes[i].push_back({pins[i]->layerIdx, utils::IntervalT<int>(pins[i]->trackIdx), utils::IntervalT<int>(pins[i]->crossPointIdx)});
+            pinAccessBoxes[i].push_back(database.getLoc(gridPinAccessBoxes[i][0]));
+        }
+        else {
+            gridPinAccessBoxes[i] = oriGridPins[pins[i]->pinIdx];
+            for (auto box : gridPinAccessBoxes[i]) pinAccessBoxes[i].push_back(database.getLoc(box));
+        }
+    }
+
+    // clear routing result
+    gridTopo.clear();
+
+    // trim route guides
+}

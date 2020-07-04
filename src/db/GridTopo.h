@@ -36,6 +36,12 @@ public:
 
     friend ostream& operator<<(ostream& os, const GridSteiner& node);
     void printTree(ostream& os = std::cout, int depth = 0);
+
+    // partial ripup
+    // if this flag set true, means either the edge (*parent, *this) is violated, or this->extWireSeg is violated, or both.
+    bool isVio = false;
+    int distance = 4;
+    int pNetIdx = -1;
 };
 
 }  // namespace db

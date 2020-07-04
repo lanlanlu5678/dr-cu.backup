@@ -38,6 +38,10 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
         if (db::isSucc(status)) {
             // init localNet and check
             localNet.initGridBoxes();
+
+            // partial ripup
+            if (localNet.pseudoNetIdx > -1) localNet.makePseudo();
+
             localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
             localNet.initNumOfVertices();
 

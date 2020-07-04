@@ -77,7 +77,7 @@ def view():
 
 for bm in bms:
     bm_log_dir = '{}/{}'.format(log_dir, bm.abbr_name)
-    file_name_prefix = '{0}/ispd20{1}/{2}/{2}'.format(bm_path, bm.full_name[4:6], bm.full_name)
+    file_name_prefix = '{0}/{2}/{2}'.format(bm_path, bm.full_name[4:6], bm.full_name)
     if bm.abbr_name in ['9t1', '9t2', '9t3', '9t6']:
         guide_opt = '-guide {0}.guide'.format(file_name_prefix)
     else:

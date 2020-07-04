@@ -64,6 +64,7 @@ public:
 
     void makeItSilent();
     void adapt();
+
 };
 
 extern Setting setting;

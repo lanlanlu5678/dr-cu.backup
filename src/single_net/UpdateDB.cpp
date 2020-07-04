@@ -1,17 +1,65 @@
 #include "UpdateDB.h"
 
 void UpdateDB::commitRouteResult(LocalNet &localNet, db::Net &dbNet) {
-    // update db::Net
-    dbNet.gridTopo = move(localNet.gridTopo);
-    // update RouteGrid
-    dbNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
-        if (node->parent) {
-            database.useEdge({*node, *(node->parent)}, dbNet.idx);
+
+    if (dbNet.pinsOfPseudoNets.empty()) {
+        // update db::Net
+        dbNet.gridTopo = move(localNet.gridTopo);
+        // update RouteGrid
+        dbNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
+            if (node->parent) {
+                database.useEdge({*node, *(node->parent)}, dbNet.idx);
+            }
+            if (node->extWireSeg) {
+                database.useEdge(*(node->extWireSeg), dbNet.idx);
+            }
+        });
+    }
+    else {
+        // partial ripup : update dbNet
+        // original GridSteiner should be replaced
+        auto &pins = dbNet.pinsOfPseudoNets[localNet.pseudoNetIdx];
+        int pidx;
+
+        // merge end pins
+        localNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node){
+            pidx = node->pinIdx;
+            if (pidx > 0) {
+                for (auto &c : pins[pidx]->children) {
+                    c->parent = node;
+                    node->children.push_back(c);
+                }
+                node->pinIdx = pins[pidx]->pinIdx;
+            }
+
+            // update RouteGrid
+            if (node->parent) {
+                database.useEdge({*node, *(node->parent)}, dbNet.idx);
+            }
+            if (node->extWireSeg) {
+                database.useEdge(*(node->extWireSeg), dbNet.idx);
+            }
+        });
+
+        // merge root
+        auto root = localNet.gridTopo[0];
+        pidx = pins[0]->pinIdx;
+        if (pidx > -1) {
+            for (auto &n : dbNet.gridTopo) {
+                if (n == pins[0]) n = root;
+            }
         }
-        if (node->extWireSeg) {
-            database.useEdge(*(node->extWireSeg), dbNet.idx);
+        if (pins[0]->parent) {
+            root->parent = pins[0]->parent;
+            for (auto &c : pins[0]->parent->children)
+                if (c == pins[0]) c = root;
         }
-    });
+        for (auto &c : pins[0]->children) {
+            if (!c->isVio) root->children.push_back(c);
+        }
+        root->pinIdx = pidx;
+        if (root->extWireSeg) database.useEdge(*(root->extWireSeg), dbNet.idx);
+    }
 }
 
 void UpdateDB::clearRouteResult(db::Net &dbNet) {
@@ -55,7 +103,8 @@ void UpdateDB::commitViaTypes(db::Net& dbNet) {
 
 bool UpdateDB::checkViolation(db::Net &dbNet) {
     bool hasVio = false;
-    auto checkEdge = [&](const db::GridEdge& edge) {
+
+    auto checkEdge = [&](const db::GridEdge& edge, bool &isVio) {
         if (database.getEdgeVioCost(edge, dbNet.idx, false)) {
             hasVio = true;
             auto uLoc = database.getLoc(edge.u);
@@ -77,11 +126,18 @@ bool UpdateDB::checkViolation(db::Net &dbNet) {
             for (const auto& guide : relatedGuides) {
                 ++dbNet.routeGuideVios[guide.second];
             }
+
+            // partial ripup
+            isVio = true;
         }
     };
     dbNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
-        if (node->parent) checkEdge({*node, *(node->parent)});
-        if (node->extWireSeg) checkEdge(*(node->extWireSeg));
+        if (node->parent) checkEdge({*node, *(node->parent)}, node->isVio);
+        if (node->extWireSeg) checkEdge(*(node->extWireSeg), node->isVio);
+        
+        // partial ripup
+        node->pNetIdx = -1;
+        node->distance = 4;
     });
     return hasVio;
 }

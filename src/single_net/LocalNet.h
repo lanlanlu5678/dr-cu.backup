@@ -26,6 +26,10 @@ public:
 
     void print() const;  // db::NetBase::print() + RouteGuideGraph::print()
 
+    // partial ripup: trim unviolated edges/boxes, make psudo pins.
+    int pseudoNetIdx = -1;
+    void makePseudo();
+
 private:
     void getRouteGuideMapping();
 };

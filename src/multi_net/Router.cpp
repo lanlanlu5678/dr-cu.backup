@@ -1,5 +1,6 @@
 #include "Router.h"
 #include "Scheduler.h"
+#include "single_net/PartialRipup.h"
 
 const MTStat& MTStat::operator+=(const MTStat& rhs) {
     auto dur = rhs.durations;
@@ -46,7 +47,8 @@ void Router::run() {
         if (iter > 0) {
             // updateCost should before ripup, otherwise, violated nets have gone
             updateCost(netsToRoute);
-            ripup(netsToRoute);
+            // partial ripup
+            partialRipUp(netsToRoute);
         }
         database.statHistCost();
         if (db::setting.rrrIterLimit > 1) {
@@ -87,7 +89,6 @@ vector<int> Router::getNetsToRoute() {
     vector<int> netsToRoute;
     if (iter == 0) {
         for (int i = 0; i < database.nets.size(); i++) {
-            // if (database.nets[i].getName() == "net8984") netsToRoute.push_back(i);
             netsToRoute.push_back(i);
         }
     } else {
@@ -108,6 +109,19 @@ void Router::ripup(const vector<int>& netsToRoute) {
     }
 }
 
+// partial ripup
+void Router::partialRipUp(const vector<int>& netsToRoute) {
+    numOfPseudoNets = 0;
+    int ignore = 0;
+    for (auto netIdx : netsToRoute) {
+        PartialRipup::extractPseudoNets(database.nets[netIdx], numOfPseudoNets, ignore);
+        allNetStatus[netIdx] = db::RouteStatus::FAIL_UNPROCESSED;
+    }
+    numOfPseudoNets -= ignore;
+    log() << "After extracting, " << numOfPseudoNets << " pseudo nets has been found;\n";
+    // log() << "  " << ignore << " roots out of route guide.\n";
+}
+
 void Router::updateCost(const vector<int>& netsToRoute) {
     database.addHistCost();
     database.fadeHistCost(netsToRoute);
@@ -116,21 +130,32 @@ void Router::updateCost(const vector<int>& netsToRoute) {
 void Router::route(const vector<int>& netsToRoute) {
     // init SingleNetRouters
     vector<SingleNetRouter> routers;
-    routers.reserve(netsToRoute.size());
-    for (int netIdx : netsToRoute) {
-        routers.emplace_back(database.nets[netIdx]);
-    }
 
+    if (iter) {
+        routers.reserve(numOfPseudoNets);
+        for (int n : netsToRoute) {
+            for (int i=0; i<database.nets[n].pinsOfPseudoNets.size(); i++) {
+                routers.emplace_back(database.nets[n]);
+                routers.back().localNet.pseudoNetIdx = i;
+            }
+        }
+    } else {
+        routers.reserve(netsToRoute.size());
+        for (int netIdx : netsToRoute) {
+            routers.emplace_back(database.nets[netIdx]);
+        }
+        numOfPseudoNets = netsToRoute.size();
+    }
+    
     // pre route
-    auto preMT = runJobsMT(netsToRoute.size(), [&](int netIdx) { routers[netIdx].preRoute(); });
+    MTStat preMT = runJobsMT(numOfPseudoNets, [&](int netIdx) { routers[netIdx].preRoute(); });
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         printlog("preMT", preMT);
-        printStat();
     }
 
     // schedule
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
-        log() << "Start multi-thread scheduling. There are " << netsToRoute.size() << " nets to route." << std::endl;
+        log() << "Start multi-thread scheduling. There are " << numOfPseudoNets << " nets to route." << std::endl;
     }
     Scheduler scheduler(routers);
     const vector<vector<int>>& batches = scheduler.schedule();
@@ -151,6 +176,7 @@ void Router::route(const vector<int>& netsToRoute) {
             allNetStatus[router.dbNet.idx] = router.status;
         });
         allMazeMT += mazeMT;
+
         // 2 commit nets to DB
         auto commitMT = runJobsMT(batch.size(), [&](int jobIdx) {
             auto& router = routers[batch[jobIdx]];
@@ -158,6 +184,7 @@ void Router::route(const vector<int>& netsToRoute) {
             router.commitNetToDB();
         });
         allCommitMT += commitMT;
+
         // 3 get via types
         allGetViaTypesMT += runJobsMT(batch.size(), [&](int jobIdx) {
             auto& router = routers[batch[jobIdx]];
