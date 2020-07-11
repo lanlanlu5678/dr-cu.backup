@@ -21,11 +21,7 @@ private:
     void printStat(bool major = false);
 
     // partial ripup
-    int numOfPseudoNets = 0;
+    int numOfPNets = 0;
+    // vector<db::mutex_wrapper> netsLock;
     void partialRipUp(const vector<int>& netsToRoute);
-    // V0.1
-    // void pureMark(std::shared_ptr<db::GridSteiner> &node, vector<int> &pnets);
-    // void mark(std::shared_ptr<db::GridSteiner> &node, std::unordered_map<int,std::shared_ptr<db::GridSteiner>> &roots, int &num);
-    // void purge(std::shared_ptr<db::GridSteiner> &node, vector<std::shared_ptr<db::GridSteiner>> &pnet, int netIdx);
-    // void extractPseudoNet(db::Net &dbNet);
 };

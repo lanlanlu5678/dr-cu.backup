@@ -19,6 +19,11 @@ namespace db {
 class Database : public RouteGrid, public NetList {
 public:
     utils::BoxT<DBU> dieRegion;
+    
+    // // partial ripup : debug
+    // mutex_wrapper debugPrintLock;
+    // // std::shared_ptr<GridSteiner> backup;
+    // std::shared_ptr<GridSteiner> breakpoint;
 
     void init();
     void clear() { RouteGrid::clear(); }

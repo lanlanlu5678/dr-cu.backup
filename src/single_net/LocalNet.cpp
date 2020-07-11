@@ -1,4 +1,5 @@
 #include "LocalNet.h"
+#include "PartialRipup.h"
 
 void LocalNet::initGridBoxes() {
     // rangeSearch & slice routeGuides
@@ -18,6 +19,8 @@ void LocalNet::initGridBoxes() {
 
     // init gridPinAccessBoxes
     database.getGridPinAccessBoxes(dbNet, gridPinAccessBoxes);
+    // partial ripup
+    if (pseudoNetIdx >= 0) initPPinBoxes();
     for (unsigned pinIdx = 0; pinIdx != numOfPins(); ++pinIdx) {
         pinAccessBoxes[pinIdx].clear(); 
         for (auto& box : gridPinAccessBoxes[pinIdx]) {
@@ -177,33 +180,117 @@ int LocalNet::getCrossPointPenalty(int guideIdx, int trackIdx, int cpIdx) const 
 
 void LocalNet::makePseudo() {
 
-    auto &pins = dbNet.pinsOfPseudoNets[pseudoNetIdx];
-    vector<vector<db::GridBoxOnLayer>> oriGridPins;
+    vector<vector<db::GridBoxOnLayer>> pGridBoxes;
+    vector<int> relatedGuides(gridRouteGuides.size(), 0);
+    vector<db::GridBoxOnLayer> trimedGuides;
+
+    // INIT PINS & RELATED GUIDES
+    pins.push_back(dbNet.pinsOfPNets[pseudoNetIdx]);
+    if (pins[0]->isVio) {
+        // PartialRipup::checkStartPin(pins[0]);
+        PartialRipup::purge(pins[0], pins, relatedGuides, gridRouteGuides);
+    }
+    else {
+        for (int i=0; i<gridRouteGuides.size(); i++) {
+            if (gridRouteGuides[i].includePoint(*(pins[0]))) {
+                relatedGuides[i] = 1;
+                break;
+            }
+        }
+        for (auto c : pins[0]->children)
+            if (c->isVio) PartialRipup::purge(c, pins, relatedGuides, gridRouteGuides);
+    }
+
+    for (int i=0; i<relatedGuides.size(); i++) {
+        if (relatedGuides[i] > 0) trimedGuides.push_back(gridRouteGuides[i]);
+    }
+    gridRouteGuides = std::move(trimedGuides);
+
+    pGridBoxes.resize(pins.size());
+    if (pins[0]->parent) pGridBoxes[0].push_back({pins[0]->layerIdx,
+                            utils::IntervalT<int>(pins[0]->trackIdx),
+                            utils::IntervalT<int>(pins[0]->crossPointIdx)});
+    else pGridBoxes[0] = std::move(gridPinAccessBoxes[pins[0]->pinIdx]);
+    for (int i=1; i<pins.size(); i++) {
+        if (pins[i]->children.empty()) {
+            // PartialRipup::checkEndPin(i,pseudoNetIdx,pins,dbNet);
+            pGridBoxes[i] = std::move(gridPinAccessBoxes[pins[i]->pinIdx]);
+        }
+        else pGridBoxes[i].push_back({pins[i]->layerIdx,
+                utils::IntervalT<int>(pins[i]->trackIdx),
+                utils::IntervalT<int>(pins[i]->crossPointIdx)});
+    }
+    gridPinAccessBoxes = std::move(pGridBoxes);
+    pinAccessBoxes.clear();
+    for (auto &Boxes : gridPinAccessBoxes) {
+        pinAccessBoxes.emplace_back();
+        auto &pBoxes = pinAccessBoxes.back();
+        for (auto box : Boxes) pBoxes.push_back(database.getLoc(box));
+    }
+
+    gridTopo.clear();
+}
+
+/*
+    in case of repeatly push same guide, use vector<int> to mark
+*/
+void LocalNet::initPseudo() {
+
+    vector<int> guideIdx(routeGuides.size());
+    vector<db::BoxOnLayer> relatedGuides;
+
+    // traverse pseudo net
+    // TODO : Diff-layer guides & trim
+    pins.push_back(dbNet.pinsOfPNets[pseudoNetIdx]);
+        
+    if (pins[0]->isVio) PartialRipup::traversePNet(pins[0], pins, routeGuides, guideIdx);
+    else
+        for (auto c : pins[0]->children) {
+            if (c->isVio) PartialRipup::traversePNet(c, pins, routeGuides, guideIdx);
+        }
     
+    // UPDATE GUIDES
+    for (auto p : pins) {
+        auto pbox = database.getLoc(*p);
+        for (int i=0; i<routeGuides.size(); i++) {
+            auto &box = routeGuides[i];
+            if (box.layerIdx == p->layerIdx &&
+                box.x.low < pbox.x && box.x.high > pbox.x &&
+                box.y.low < pbox.y && box.y.high > pbox.y) {
+                guideIdx[i] = 1;
+                break;
+            }
+        }
+    }
+    for (int i=0; i<guideIdx.size(); i++)
+        if (guideIdx[i] > 0) relatedGuides.push_back(routeGuides[i]);
+    routeGuides = std::move(relatedGuides);
+
+    gridTopo.clear();
+}
+
+/*
+    pins[0]'s position must be fix to keep edge valid.
+*/
+void LocalNet::initPPinBoxes() {
+
+    vector<vector<db::GridBoxOnLayer>> ppins;
+
+    ppins.resize(pins.size());
     pinAccessBoxes.clear();
     pinAccessBoxes.resize(pins.size());
-    oriGridPins = std::move(gridPinAccessBoxes);
-    gridPinAccessBoxes.clear();
-    gridPinAccessBoxes.resize(pins.size());
 
-    // init (gird)PinAccessBoxes
-    // the position of start pin fix now, as it may incurr mis-match
-    gridPinAccessBoxes[0].push_back({pins[0]->layerIdx, utils::IntervalT<int>(pins[0]->trackIdx), utils::IntervalT<int>(pins[0]->crossPointIdx)});
-    pinAccessBoxes[0].push_back(database.getLoc(gridPinAccessBoxes[0][0]));
+    ppins[0].push_back({pins[0]->layerIdx,
+                        utils::IntervalT<int>(pins[0]->trackIdx),
+                        utils::IntervalT<int>(pins[0]->crossPointIdx)});
 
     for (int i=1; i<pins.size(); i++) {
         if (pins[i]->pinIdx < 0) {
-            gridPinAccessBoxes[i].push_back({pins[i]->layerIdx, utils::IntervalT<int>(pins[i]->trackIdx), utils::IntervalT<int>(pins[i]->crossPointIdx)});
-            pinAccessBoxes[i].push_back(database.getLoc(gridPinAccessBoxes[i][0]));
+            ppins[i].push_back({pins[i]->layerIdx,
+                                utils::IntervalT<int>(pins[i]->trackIdx),
+                                utils::IntervalT<int>(pins[i]->crossPointIdx)});
         }
-        else {
-            gridPinAccessBoxes[i] = oriGridPins[pins[i]->pinIdx];
-            for (auto box : gridPinAccessBoxes[i]) pinAccessBoxes[i].push_back(database.getLoc(box));
-        }
+        else ppins[i] = move(gridPinAccessBoxes[pins[i]->pinIdx]);
     }
-
-    // clear routing result
-    gridTopo.clear();
-
-    // trim route guides
+    gridPinAccessBoxes = move(ppins);
 }

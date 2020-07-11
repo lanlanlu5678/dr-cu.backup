@@ -58,10 +58,8 @@ public:
     void clearResult();
 
     // partial ripup
-    // index in the outer vector is pseudoNetIdx, in the inner vector is pinIdx with root->0;
-    // vector<int> vioGuides;
-    vector<vector<std::shared_ptr<GridSteiner>>> pinsOfPseudoNets;
-    // vector<vector<int>> linesOfPseudoNets;
+    // pseudo net idx -> start pin of a pnet;
+    vector<std::shared_ptr<GridSteiner>> pinsOfPNets;
 };
 
 class NetList {

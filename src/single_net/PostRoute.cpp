@@ -32,10 +32,6 @@ db::RouteStatus PostRoute::connectPins() {
     for (auto tap : pinTaps) {
         PinTapConnector pinTapConnector(*tap, dbNet, tap->pinIdx);
         netStatus &= pinTapConnector.run();
-        // partial ripup : DEBUG
-        if (netStatus == +db::RouteStatus::FAIL_CONN_EXT_PIN)
-            log() << "DEBUG\n";
-
         if (!pinTapConnector.bestLink.empty()) {
             linkToPins[tap] = move(pinTapConnector.bestLink);
             samePinTaps[tap->pinIdx].push_back(tap);  // only consider those with links

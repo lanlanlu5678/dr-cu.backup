@@ -98,7 +98,6 @@ vector<int> Router::getNetsToRoute() {
             }
         }
     }
-
     return netsToRoute;
 }
 
@@ -111,15 +110,13 @@ void Router::ripup(const vector<int>& netsToRoute) {
 
 // partial ripup
 void Router::partialRipUp(const vector<int>& netsToRoute) {
-    numOfPseudoNets = 0;
-    int ignore = 0;
+    numOfPNets = 0;
     for (auto netIdx : netsToRoute) {
-        PartialRipup::extractPseudoNets(database.nets[netIdx], numOfPseudoNets, ignore);
+        PartialRipup::extractPseudoNets(database.nets[netIdx], numOfPNets);
         allNetStatus[netIdx] = db::RouteStatus::FAIL_UNPROCESSED;
     }
-    numOfPseudoNets -= ignore;
-    log() << "After extracting, " << numOfPseudoNets << " pseudo nets has been found;\n";
-    // log() << "  " << ignore << " roots out of route guide.\n";
+    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE)
+        log() << "After extracting, " << numOfPNets << " pseudo nets has been found;\n";
 }
 
 void Router::updateCost(const vector<int>& netsToRoute) {
@@ -132,30 +129,33 @@ void Router::route(const vector<int>& netsToRoute) {
     vector<SingleNetRouter> routers;
 
     if (iter) {
-        routers.reserve(numOfPseudoNets);
+        routers.reserve(numOfPNets);
         for (int n : netsToRoute) {
-            for (int i=0; i<database.nets[n].pinsOfPseudoNets.size(); i++) {
+            for (int i=0; i<database.nets[n].pinsOfPNets.size(); i++) {
                 routers.emplace_back(database.nets[n]);
                 routers.back().localNet.pseudoNetIdx = i;
             }
         }
+        // numOfPNets = 1;
+        // routers.emplace_back(database.nets[3066]);
+        // routers[0].localNet.pseudoNetIdx = 0;
     } else {
         routers.reserve(netsToRoute.size());
         for (int netIdx : netsToRoute) {
             routers.emplace_back(database.nets[netIdx]);
         }
-        numOfPseudoNets = netsToRoute.size();
+        numOfPNets = netsToRoute.size();
     }
     
     // pre route
-    MTStat preMT = runJobsMT(numOfPseudoNets, [&](int netIdx) { routers[netIdx].preRoute(); });
+    MTStat preMT = runJobsMT(numOfPNets, [&](int netIdx) { routers[netIdx].preRoute(); });
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         printlog("preMT", preMT);
     }
 
     // schedule
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
-        log() << "Start multi-thread scheduling. There are " << numOfPseudoNets << " nets to route." << std::endl;
+        log() << "Start multi-thread scheduling. There are " << numOfPNets << " nets to route." << std::endl;
     }
     Scheduler scheduler(routers);
     const vector<vector<int>>& batches = scheduler.schedule();
@@ -176,7 +176,6 @@ void Router::route(const vector<int>& netsToRoute) {
             allNetStatus[router.dbNet.idx] = router.status;
         });
         allMazeMT += mazeMT;
-
         // 2 commit nets to DB
         auto commitMT = runJobsMT(batch.size(), [&](int jobIdx) {
             auto& router = routers[batch[jobIdx]];
@@ -184,7 +183,6 @@ void Router::route(const vector<int>& netsToRoute) {
             router.commitNetToDB();
         });
         allCommitMT += commitMT;
-
         // 3 get via types
         allGetViaTypesMT += runJobsMT(batch.size(), [&](int jobIdx) {
             auto& router = routers[batch[jobIdx]];
@@ -206,6 +204,7 @@ void Router::route(const vector<int>& netsToRoute) {
         }
         iBatch++;
     }
+
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         printlog("allMazeMT", allMazeMT);
         printlog("allCommitMT", allCommitMT);

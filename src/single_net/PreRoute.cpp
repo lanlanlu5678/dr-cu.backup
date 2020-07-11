@@ -8,23 +8,23 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
         database.expandBox(guides[i], numPitchForGuideExpand);
     }
 
-    // add diff-layer guides
-    if (db::rrrIterSetting.addDiffLayerGuides) {
-        int oriSize = guides.size();
-        for (int i = 0; i < oriSize; ++i) {
-            int j = guides[i].layerIdx;
-            if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres) {
-                if (j > 2) guides.emplace_back(j - 1, guides[i]);  // do not add to layers 0, 1
-                if ((j + 1) < database.getLayerNum()) guides.emplace_back(j + 1, guides[i]);
-                db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
-            }
-            if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres * 2) {
-                if (j > 3) guides.emplace_back(j - 2, guides[i]);  // do not add to layers 0, 1
-                if ((j + 2) < database.getLayerNum()) guides.emplace_back(j + 2, guides[i]);
-                db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
-            }
-        }
-    }
+    // // add diff-layer guides (partial ripup)
+    // if (db::rrrIterSetting.addDiffLayerGuides) {  // && localNet.pseudoNetIdx < 0) {
+    //     int oriSize = guides.size();
+    //     for (int i = 0; i < oriSize; ++i) {
+    //         int j = guides[i].layerIdx;
+    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres) {
+    //             if (j > 2) guides.emplace_back(j - 1, guides[i]);  // do not add to layers 0, 1
+    //             if ((j + 1) < database.getLayerNum()) guides.emplace_back(j + 1, guides[i]);
+    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
+    //         }
+    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres * 2) {
+    //             if (j > 3) guides.emplace_back(j - 2, guides[i]);  // do not add to layers 0, 1
+    //             if ((j + 2) < database.getLayerNum()) guides.emplace_back(j + 2, guides[i]);
+    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
+    //         }
+    //     }
+    // }
 
     // expand guides by cross layer connection
     expandGuidesToMargin();
@@ -37,11 +37,9 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
         status = expandGuidesToCoverPins();
         if (db::isSucc(status)) {
             // init localNet and check
-            localNet.initGridBoxes();
-
             // partial ripup
-            if (localNet.pseudoNetIdx > -1) localNet.makePseudo();
-
+            if (localNet.pseudoNetIdx >= 0) localNet.initPseudo();
+            localNet.initGridBoxes();
             localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
             localNet.initNumOfVertices();
 
@@ -49,7 +47,7 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
                 status = db::RouteStatus::FAIL_PIN_OUT_OF_GRID;
             } else if (!localNet.checkPinGuideConn()) {
                 status = db::RouteStatus::FAIL_DETACHED_PIN;
-            } else if (!checkGuideConnTrack()) {
+            } else if (!checkGuideConnTrack() && localNet.pseudoNetIdx < 0) {
                 status = db::RouteStatus::FAIL_DETACHED_GUIDE;
             }
         }

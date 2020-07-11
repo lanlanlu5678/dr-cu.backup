@@ -2,7 +2,7 @@
 
 void UpdateDB::commitRouteResult(LocalNet &localNet, db::Net &dbNet) {
 
-    if (dbNet.pinsOfPseudoNets.empty()) {
+    if (dbNet.pinsOfPNets.empty()) {
         // update db::Net
         dbNet.gridTopo = move(localNet.gridTopo);
         // update RouteGrid
@@ -18,18 +18,18 @@ void UpdateDB::commitRouteResult(LocalNet &localNet, db::Net &dbNet) {
     else {
         // partial ripup : update dbNet
         // original GridSteiner should be replaced
-        auto &pins = dbNet.pinsOfPseudoNets[localNet.pseudoNetIdx];
+        auto &ppins = localNet.pins;
         int pidx;
 
         // merge end pins
         localNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node){
             pidx = node->pinIdx;
             if (pidx > 0) {
-                for (auto &c : pins[pidx]->children) {
+                for (auto &c : ppins[pidx]->children) {
                     c->parent = node;
                     node->children.push_back(c);
                 }
-                node->pinIdx = pins[pidx]->pinIdx;
+                node->pinIdx = ppins[pidx]->pinIdx;
             }
 
             // update RouteGrid
@@ -41,24 +41,33 @@ void UpdateDB::commitRouteResult(LocalNet &localNet, db::Net &dbNet) {
             }
         });
 
-        // merge root
-        auto root = localNet.gridTopo[0];
-        pidx = pins[0]->pinIdx;
-        if (pidx > -1) {
-            for (auto &n : dbNet.gridTopo) {
-                if (n == pins[0]) n = root;
+        // merge roots
+        for (auto root : localNet.gridTopo) {
+            if (root->pinIdx == 0) {
+                if (ppins[0]->parent) {
+                    root->parent = ppins[0]->parent;
+                    for (auto &c : ppins[0]->parent->children)
+                        if (c == ppins[0]) c = root;
+                }
+                else {
+                    assert(ppins[0]->pinIdx > -1);
+                    for (auto &n : dbNet.gridTopo) {
+                        if (n == ppins[0]) n = root;
+                    }
+                }
+                for (auto &c : ppins[0]->children) {
+                    if (!c->isVio) {
+                        root->children.push_back(c);
+                        c->parent = root;
+                    }
+                }
+                root->pinIdx = ppins[0]->pinIdx;
             }
+            else dbNet.gridTopo.push_back(root);
+            if (root->extWireSeg) database.useEdge(*(root->extWireSeg), dbNet.idx);
         }
-        if (pins[0]->parent) {
-            root->parent = pins[0]->parent;
-            for (auto &c : pins[0]->parent->children)
-                if (c == pins[0]) c = root;
-        }
-        for (auto &c : pins[0]->children) {
-            if (!c->isVio) root->children.push_back(c);
-        }
-        root->pinIdx = pidx;
-        if (root->extWireSeg) database.useEdge(*(root->extWireSeg), dbNet.idx);
+
+        localNet.gridTopo.clear();
     }
 }
 
@@ -103,7 +112,7 @@ void UpdateDB::commitViaTypes(db::Net& dbNet) {
 
 bool UpdateDB::checkViolation(db::Net &dbNet) {
     bool hasVio = false;
-
+    
     auto checkEdge = [&](const db::GridEdge& edge, bool &isVio) {
         if (database.getEdgeVioCost(edge, dbNet.idx, false)) {
             hasVio = true;
