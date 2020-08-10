@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fstream>
 #include "db/Database.h"
 
 class PartialRipup {
@@ -7,16 +8,18 @@ class PartialRipup {
 
     static void pureMark(std::shared_ptr<db::GridSteiner> node, vector<int> &pnets);
     static void mark(std::shared_ptr<db::GridSteiner> node, std::unordered_map<int,std::shared_ptr<db::GridSteiner>> &roots, int &num);
-    // static void purge(std::shared_ptr<db::GridSteiner> &node, vector<std::shared_ptr<db::GridSteiner>> &pins, int netIdx);
 
     static void removeDbEdges(std::shared_ptr<db::GridSteiner> node, int netIdx);
-    // static void purge(std::shared_ptr<db::GridSteiner> node, vector<std::shared_ptr<db::GridSteiner>> &pins);
-    static void purge(std::shared_ptr<db::GridSteiner> node, vector<std::shared_ptr<db::GridSteiner>> &pins, vector<int> &guides, vector<db::GridBoxOnLayer> &gridGuides);
-    static void traversePNet(std::shared_ptr<db::GridSteiner> node, vector<std::shared_ptr<db::GridSteiner>> &pins, vector<db::BoxOnLayer> &oriGuides, vector<int> &guideIdx);
+    static void checkGuidesAndPins(std::shared_ptr<db::GridSteiner> node, vector<std::shared_ptr<db::GridSteiner>> &pins, vector<db::BoxOnLayer> &guides, vector<int> &vios);
+    static void purge(std::shared_ptr<db::GridSteiner> node);
+    static int inGuide(int l, DBU x, DBU y, db::BoxOnLayer &box);
 
     static void extractPseudoNets(db::Net &dbNet, int &num);
 
-    static void printPNet(std::shared_ptr<db::GridSteiner> node);
-    static void checkStartPin(std::shared_ptr<db::GridSteiner> sp);
-    static void checkEndPin(int ppinIdx, int pNetIdx, vector<std::shared_ptr<db::GridSteiner>> &pins, const db::Net &dbNet);
+    static void mergeUnique(std::shared_ptr<db::GridSteiner> old, std::shared_ptr<db::GridSteiner> nld);
+
+    static void checkPaths(std::shared_ptr<db::GridSteiner> root, vector<db::BoxOnLayer> &paths);
+    static void checkPaths(vector<std::shared_ptr<db::GridSteiner>> &pins, vector<db::BoxOnLayer> &paths);
+
+    static void plotPNet(std::ofstream &ofs, std::shared_ptr<db::GridSteiner> node);
 };

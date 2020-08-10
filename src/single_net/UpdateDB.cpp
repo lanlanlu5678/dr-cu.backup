@@ -1,4 +1,5 @@
 #include "UpdateDB.h"
+#include "PartialRipup.h"
 
 void UpdateDB::commitRouteResult(LocalNet &localNet, db::Net &dbNet) {
 
@@ -20,6 +21,13 @@ void UpdateDB::commitRouteResult(LocalNet &localNet, db::Net &dbNet) {
         // original GridSteiner should be replaced
         auto &ppins = localNet.pins;
         int pidx;
+
+        // purge origin grid topo
+        if (ppins[0]->isVio) PartialRipup::purge(ppins[0]);
+        else {
+            for (auto c : ppins[0]->children)
+                if (c->isVio) PartialRipup::purge(c);
+        }
 
         // merge end pins
         localNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node){
@@ -55,12 +63,7 @@ void UpdateDB::commitRouteResult(LocalNet &localNet, db::Net &dbNet) {
                         if (n == ppins[0]) n = root;
                     }
                 }
-                for (auto &c : ppins[0]->children) {
-                    if (!c->isVio) {
-                        root->children.push_back(c);
-                        c->parent = root;
-                    }
-                }
+                PartialRipup::mergeUnique(ppins[0], root);
                 root->pinIdx = ppins[0]->pinIdx;
             }
             else dbNet.gridTopo.push_back(root);
@@ -141,12 +144,13 @@ bool UpdateDB::checkViolation(db::Net &dbNet) {
         }
     };
     dbNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
-        if (node->parent) checkEdge({*node, *(node->parent)}, node->isVio);
-        if (node->extWireSeg) checkEdge(*(node->extWireSeg), node->isVio);
-        
         // partial ripup
+        node->isVio = false;
         node->pNetIdx = -1;
         node->distance = 4;
+        
+        if (node->parent) checkEdge({*node, *(node->parent)}, node->isVio);
+        if (node->extWireSeg) checkEdge(*(node->extWireSeg), node->isVio);
     });
     return hasVio;
 }

@@ -6,3 +6,8 @@ scripts/__pycache__
 tags
 
 dr-notes.md
+
+ispd18eval/*
+ispd19eval/*
+rsyn/*
+toys/*

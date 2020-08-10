@@ -70,64 +70,40 @@ void PartialRipup::mark(std::shared_ptr<db::GridSteiner> node, std::unordered_ma
     }
 }
 
-void PartialRipup::purge(std::shared_ptr<db::GridSteiner> node, vector<std::shared_ptr<db::GridSteiner>> &pins, vector<int> &guides, vector<db::GridBoxOnLayer> &gridGuides) {
+void PartialRipup::checkGuidesAndPins(std::shared_ptr<db::GridSteiner> node,
+                            vector<std::shared_ptr<db::GridSteiner>> &pins,
+                            vector<db::BoxOnLayer> &guides,
+                            vector<int> &vios) {
 
-    // find related grid route guides
-    if (node->parent && node->layerIdx != node->parent->layerIdx) {
-        for (int i=0; i<gridGuides.size(); i++) {
-            if (gridGuides[i].includePoint(*node)) {
-                guides[i] = 1;
-                break;
-            }
-        }
+    for (int i=0; i<guides.size(); i++) {
+        auto p = database.getLoc(*node);
+        int d = inGuide(node->layerIdx, p.x, p.y, guides[i]);
+        if (d > -3) vios[i] |= (1<<(d+2));
     }
 
     for (auto c : node->children) {
-        if (c->isVio) purge(c, pins, guides, gridGuides);
-        else {
-            c->parent = nullptr;
-            pins.push_back(c);
-        }
+        if (c->isVio) checkGuidesAndPins(c, pins, guides, vios);
+        else pins.push_back(c);
     }
-    if (node->children.empty()) {
-        // if (node->pinIdx < 0) {
-        //     std::cout << "*********** ERROR : IN PURGE INVALID END PIN\n";
-        // }
-        pins.push_back(node);
+    if (node->children.empty()) pins.push_back(node);
+}
+
+void PartialRipup::purge(std::shared_ptr<db::GridSteiner> node) {
+    for (auto c : node->children) {
+        if (c->isVio) purge(c);
+        else c->parent = nullptr;
     }
     node->children.clear();
     node->parent = nullptr;
 }
 
-void PartialRipup::traversePNet(std::shared_ptr<db::GridSteiner> node, 
-                                vector<std::shared_ptr<db::GridSteiner>> &pins,
-                                vector<db::BoxOnLayer> &oriGuides,
-                                vector<int> &guideIdx) {
-
-    if (node->parent && node->layerIdx != node->parent->layerIdx) {
-        db::BoxOnLayer box;
-        auto p = database.getLoc(*node);
-        for (int i=0; i<oriGuides.size(); i++) {
-            box = oriGuides[i];
-            if (box.layerIdx == node->layerIdx &&
-                box.x.low < p.x && box.x.high > p.x &&
-                box.y.low < p.y && box.y.high > p.y) {
-                guideIdx[i] = 1;
-                break;
-            }
-        }
-    }
-
-    for (auto c : node->children) {
-        if (c->isVio) traversePNet(c, pins, oriGuides, guideIdx);
-        else {
-            c->parent = nullptr;
-            pins.push_back(c);
-        }
-    }
-    if (node->children.empty()) pins.push_back(node);
-    node->children.clear();
-    node->parent = nullptr;
+int PartialRipup::inGuide(int l, DBU x, DBU y, db::BoxOnLayer &guide) {
+    int d = l - guide.layerIdx;
+    if (abs(d)<db::rrrIterSetting.diffLayerBound &&
+        guide.x.low < x && guide.x.high > x &&
+        guide.y.low < y && guide.y.high > y) return d;
+    
+    else return -3;
 }
 
 void PartialRipup::removeDbEdges(std::shared_ptr<db::GridSteiner> node, int netIdx) {
@@ -162,64 +138,177 @@ void PartialRipup::extractPseudoNets(db::Net &dbNet, int &num) {
         }
         removeDbEdges(rp, dbNet.idx);
     }
+
 }
 
-void PartialRipup::printPNet(std::shared_ptr<db::GridSteiner> node) {
-    vector<std::shared_ptr<db::GridSteiner>> q;
-    vector<std::shared_ptr<db::GridSteiner>> tq;
-    vector<std::shared_ptr<db::GridSteiner>> all;
-    bool loop = false;
-
-    auto findin = [&all](std::shared_ptr<db::GridSteiner> node) ->bool {
-        for (auto n : all) {
-            if (n == node) return true;
-        }
-        return false;
-    };
-
-    std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
-    std::cout << (int)node->isVio << "\n";
-
-    q.push_back(node);
-    all.push_back(node);
-
-    while (!q.empty()) {
-        for (auto n : q) {
-            for (auto c : n->children) {
-                std::cout << (int)c->isVio << ",";
-                if (findin(c)) loop = true;
-                tq.push_back(c);
-                all.push_back(c);
+void PartialRipup::mergeUnique(std::shared_ptr<db::GridSteiner> old, std::shared_ptr<db::GridSteiner> nld) {
+    bool notdul;
+    for (auto c : old->children) {
+        if (!c->isVio) {
+            notdul = true;
+            for (auto nc : nld->children) {
+                if (c->layerIdx == nc->layerIdx &&
+                    c->trackIdx == nc->trackIdx &&
+                    c->crossPointIdx == nc->crossPointIdx) {
+                    mergeUnique(c, nc);
+                    c->parent = nullptr;
+                    notdul = false;
+                }
             }
-            std::cout << ";    ";
+            if (notdul) {
+                c->parent = nld;
+                nld->children.push_back(c);
+            }
         }
-        if (loop) {
-            std::cout << " A LOOP \n";
-            return;
-        }
-        q = std::move(tq);
-        std::cout << "\n";
     }
-    std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
+    old->children.clear();
 }
 
-// void PartialRipup::checkStartPin(std::shared_ptr<db::GridSteiner> sp) {
-//     if (sp->pinIdx < 0) {
-//         database.debugPrintLock.lock();
-//         std::cout << "*************** ERROR : INVALID BREAK POINT IN ROOT\n";
-//         database.debugPrintLock.unlock();
-//     }
-// }
+void PartialRipup::checkPaths(std::shared_ptr<db::GridSteiner> pin0, vector<db::BoxOnLayer> &paths) {
+    vector<std::shared_ptr<db::GridSteiner>> newPaths;
+    vector<std::shared_ptr<db::GridSteiner>> samePath;
+    utils::PointT<DBU> cp, p;
+    db::BoxOnLayer box;
+    std::shared_ptr<db::GridSteiner> node, next;
 
-// void PartialRipup::checkEndPin(int ppinIdx, int pNetIdx, vector<std::shared_ptr<db::GridSteiner>> &pins, const db::Net &dbNet) {
-//     if (pins[ppinIdx]->pinIdx == -1) {
-//         database.debugPrintLock.lock();
-//         log() << "ERROR : net " << dbNet.idx << " pseudo net " << pNetIdx 
-//             << " pin " << ppinIdx << " is not real pin but without children" << std::endl;
-//         log() << "ERROR : pseudo pins number : " << pins.size() << "\n";
-//         log() << "ERROR : pseudo pin is vio  : " << pins[ppinIdx]->isVio << "\n";
-//         log() << "ERROR : pseudo nets number : " << dbNet.pinsOfPNets.size() << "\n";
-//         if (pins[ppinIdx] == database.breakpoint) log() << "is that breakpoint\n";
-//         database.debugPrintLock.unlock();
-//     }
-// }
+    if (pin0->isVio) newPaths.push_back(pin0);
+    else
+        for (auto c : pin0->children)
+            if (c->isVio) {
+                newPaths.push_back(c);
+                // if (c->viaType) {
+                //     p = database.getLoc(*(pin0));
+                //     paths.emplace_back(pin0->layerIdx, p);
+                // }
+                p = database.getLoc(*(pin0));
+                box.Set(pin0->layerIdx, p);
+                cp = database.getLoc(*c);
+                box.FastUpdate(cp);
+                paths.push_back(box);
+            }
+
+    while (!newPaths.empty()) {
+        node = newPaths.back();
+        newPaths.pop_back();
+
+        p = database.getLoc(*node);
+        box.Set(node->layerIdx, p);
+        
+        while (node != nullptr) {
+            p = database.getLoc(*node);
+            box.FastUpdate(p);
+            for (auto c : node->children) {
+                if (c->isVio) {
+                    if (c->viaType)
+                        newPaths.push_back(c);
+                    else
+                        samePath.push_back(c);
+                }
+                else {
+                    cp = database.getLoc(*c);
+                    if (c->viaType)
+                        paths.emplace_back(c->layerIdx, cp);
+                    else
+                        box.FastUpdate(cp);
+                }
+            }
+            if (samePath.empty())
+                node = nullptr;
+            else {
+                node = samePath.back();
+                samePath.pop_back();
+            }
+        }
+        paths.push_back(box);
+    }
+}
+
+void PartialRipup::checkPaths(vector<std::shared_ptr<db::GridSteiner>> &pins, vector<db::BoxOnLayer> &paths) {
+    vector<std::shared_ptr<db::GridSteiner>> newPaths;
+    vector<std::shared_ptr<db::GridSteiner>> samePath;
+    utils::PointT<DBU> cp, p;
+    db::BoxOnLayer box;
+    std::shared_ptr<db::GridSteiner> node, next;
+
+    if (pins[0]->isVio) newPaths.push_back(pins[0]);
+    else
+        for (auto c : pins[0]->children)
+            if (c->isVio) {
+                newPaths.push_back(c);
+                // if (c->viaType) {
+                //     p = database.getLoc(*(pins[0]));
+                //     paths.emplace_back(pins[0]->layerIdx, p);
+                // }
+                p = database.getLoc(*(pins[0]));
+                box.Set(pins[0]->layerIdx, p);
+                cp = database.getLoc(*c);
+                box.FastUpdate(cp);
+                paths.push_back(box);
+            }
+
+    while (!newPaths.empty()) {
+        node = newPaths.back();
+        newPaths.pop_back();
+
+        p = database.getLoc(*node);
+        box.Set(node->layerIdx, p);
+        
+        while (node != nullptr) {
+            p = database.getLoc(*node);
+            box.FastUpdate(p);
+            if (node->children.empty())
+                pins.push_back(node);
+            for (auto c : node->children) {
+                if (c->isVio) {
+                    if (c->viaType)
+                        newPaths.push_back(c);
+                    else
+                        samePath.push_back(c);
+                }
+                else {
+                    pins.push_back(c);
+                    cp = database.getLoc(*c);
+                    if (c->viaType)
+                        paths.emplace_back(c->layerIdx, cp);
+                    else
+                        box.FastUpdate(cp);
+                }
+            }
+            if (samePath.empty())
+                node = nullptr;
+            else {
+                node = samePath.back();
+                samePath.pop_back();
+            }
+        }
+        paths.push_back(box);
+    }
+}
+
+void PartialRipup::plotPNet(std::ofstream &ofs, std::shared_ptr<db::GridSteiner> node) {
+    utils::PointT<DBU> p;
+    db::BoxOnLayer box;
+    for (auto c : node->children) {
+        if (c->isVio) plotPNet(ofs, c);
+        else {
+            p = database.getLoc(*node);
+            box.Set(node->layerIdx, p);
+            ofs << box << std::endl;
+            p = database.getLoc(*c);
+            box.Set(c->layerIdx, p);
+            ofs << box << std::endl;
+        }
+    }
+    if (node->parent) {
+        p = database.getLoc(*(node->parent));
+        box.Set(node->parent->layerIdx, p);
+    }
+    else {
+        p = database.getLoc(*node);
+        box.Set(node->layerIdx, p);
+    }
+    ofs << box << std::endl;
+    p = database.getLoc(*node);
+    box.Set(node->layerIdx, p);
+    ofs << box << std::endl;
+}

@@ -3,7 +3,7 @@
 import argparse, os
 
 all_targets = ['ispd19dr']
-run_files = 'scripts/*.py ispd18eval ispd19eval'
+run_files = 'scripts/*.py'
 
 def run(command):
     if args.print_commands:

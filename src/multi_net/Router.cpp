@@ -115,8 +115,10 @@ void Router::partialRipUp(const vector<int>& netsToRoute) {
         PartialRipup::extractPseudoNets(database.nets[netIdx], numOfPNets);
         allNetStatus[netIdx] = db::RouteStatus::FAIL_UNPROCESSED;
     }
-    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE)
+    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         log() << "After extracting, " << numOfPNets << " pseudo nets has been found;\n";
+        log() << std::endl;
+    }
 }
 
 void Router::updateCost(const vector<int>& netsToRoute) {
@@ -136,9 +138,6 @@ void Router::route(const vector<int>& netsToRoute) {
                 routers.back().localNet.pseudoNetIdx = i;
             }
         }
-        // numOfPNets = 1;
-        // routers.emplace_back(database.nets[3066]);
-        // routers[0].localNet.pseudoNetIdx = 0;
     } else {
         routers.reserve(netsToRoute.size());
         for (int netIdx : netsToRoute) {
@@ -168,7 +167,20 @@ void Router::route(const vector<int>& netsToRoute) {
     // maze route and commit DB by batch
     int iBatch = 0;
     MTStat allMazeMT, allCommitMT, allGetViaTypesMT, allCommitViaTypesMT;
+    // ppdebug stats
+    std::unordered_map<int, int> rNetVertices;
+    std::unordered_map<int, float> rNetRuntimes;
+    vector<utils::timer> rNetTimers;
+    int sumVertices = 0, sumDelta = 0;
+    float sumRuntimes = 0;
+    if (db::rrrIterSetting.ppdebug) {
+        rNetTimers.resize(routers.size());
+    }
     for (const vector<int>& batch : batches) {
+        // ppdebug stats
+        if (db::rrrIterSetting.ppdebug)
+            for (int i : batch)
+                rNetTimers[i].start();
         // 1 maze route
         auto mazeMT = runJobsMT(batch.size(), [&](int jobIdx) {
             auto& router = routers[batch[jobIdx]];
@@ -176,6 +188,24 @@ void Router::route(const vector<int>& netsToRoute) {
             allNetStatus[router.dbNet.idx] = router.status;
         });
         allMazeMT += mazeMT;
+        // pp stats
+        if (db::rrrIterSetting.ppdebug) 
+            for (int i : batch) {
+                int netId = routers[i].localNet.idx;
+                int nv = routers[i].localNet.estimatedNumOfVertices;
+                float rt = rNetTimers[i].elapsed();
+                sumVertices += nv;
+                sumRuntimes += rt;
+                sumDelta += (routers[i].localNet.pickedGuides.size() - routers[i].localNet.paths.size());
+                if (rNetVertices.count(netId)) {
+                    rNetRuntimes[netId] += rt;
+                    rNetVertices[netId] += nv;
+                }
+                else {
+                    rNetRuntimes[netId] = rt;
+                    rNetVertices[netId] = nv;
+                }
+            }
         // 2 commit nets to DB
         auto commitMT = runJobsMT(batch.size(), [&](int jobIdx) {
             auto& router = routers[batch[jobIdx]];
@@ -203,6 +233,25 @@ void Router::route(const vector<int>& netsToRoute) {
                   << commitMT << ", peakM=" << utils::mem_use::get_peak() << ", maxV=" << maxNumVertices << std::endl;
         }
         iBatch++;
+    }
+    if (db::rrrIterSetting.ppdebug) {
+        log() << "VERTICES:   Total " << sumVertices << ";    Aver " << (float)sumVertices/netsToRoute.size() << std::endl;
+        log() << "RUNTIMES:   Total " << sumRuntimes << ";    Aver " << sumRuntimes/netsToRoute.size() << std::endl;
+        log() << "DELTAGUIDES:Total " << sumDelta << ";    Aver " << (float)sumDelta/netsToRoute.size() << std::endl;
+        log() << std::endl;
+        if (iter==1 && db::rrrIterSetting.writeStat) {
+            std::ofstream ofs("stats_log.txt");
+            ofs << "VERTICES:   Total " << sumVertices << ";    Aver " << sumVertices/netsToRoute.size() << std::endl;
+            ofs << "RUNTIMES:   Total " << sumRuntimes << ";    Aver " << sumRuntimes/netsToRoute.size() << std::endl;
+            ofs << "AVERAGE PICKGUIDE - PATHS:  " << sumDelta/netsToRoute.size() << std::endl;
+            for (int i=0; i<netsToRoute.size(); i++)
+                ofs << "Net " << netsToRoute[i] << " with " << rNetVertices[netsToRoute[i]]
+                    << " vertices took " << rNetRuntimes[netsToRoute[i]] << " seconds in maze route" << std::endl;
+            ofs.close();
+        }
+        rNetVertices.clear();
+        rNetRuntimes.clear();
+        rNetTimers.clear();
     }
 
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {

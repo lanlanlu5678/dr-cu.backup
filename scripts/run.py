@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('benchmarks', choices=all_benchmarks.get_choices(), nargs='+', metavar='BENCHMARK',
                     help='Choices are ' + ', '.join(all_benchmarks.get_choices()))
 parser.add_argument('-s', '--steps', choices=['route', 'eval', 'view'], nargs='+', default=['route'])
-parser.add_argument('-p', '--benchmark_path')
+parser.add_argument('-p', '--benchmark_path', default='../../benchmark')
 parser.add_argument('-t', '--threads', type=int, default=8)
 args = parser.parse_args()
 
@@ -30,17 +30,18 @@ if bm_path is None:
 # run
 if True:
     now = datetime.datetime.now()
-    log_dir = 'run{:02d}{:02d}'.format(now.month, now.day)
+    log_dir = '{:02d}{:02d}'.format(now.month, now.day)
 
-run('mkdir -p {}'.format(log_dir))
+# run('mkdir -p {}'.format(log_dir))
 print('The following benchmarks will be ran: ', bms)
 
 
 def route():
-    run('/usr/bin/time -v ./{0} -lef {1}.input.lef -def {1}.input.def {2} -threads {3} -tat 2000000000 -output {4}.solution.def |& tee {4}.log'.format(
-        binary, file_name_prefix, guide_opt, args.threads, bm.full_name))
+    run('/usr/bin/time -v ./{0} -lef {1}.input.lef -def {1}.input.def {2} -threads {3} -tat 2000000000 -output {4}.solution.def\
+     -multiNetVerbose MIDDLE -PPDebug TRUE |& tee {4}.log'.format(
+        binary, file_name_prefix, guide_opt, args.threads, log_dir))
 
-    run('mv *.solution.def* *.log *.gprof *.pdf {} 2>/dev/null'.format(bm_log_dir))
+    run('mv *.solution.def* *.log *.gprof *.pdf logs/{} 2>/dev/null'.format(bm.abbr_name))
 
 
 def evaluate():
@@ -83,7 +84,7 @@ for bm in bms:
     else:
         guide_opt = '-guide {0}.input.guide'.format(file_name_prefix)
 
-    run('mkdir -p {}'.format(bm_log_dir))
+    # run('mkdir -p {}'.format(bm_log_dir))
     if 'route' in args.steps:
         route()
     if 'eval' in args.steps:

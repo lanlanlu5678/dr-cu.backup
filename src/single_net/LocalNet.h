@@ -29,9 +29,12 @@ public:
     // partial ripup: trim unviolated edges/boxes, make psudo pins.
     int pseudoNetIdx = -1;
     vector<std::shared_ptr<db::GridSteiner>> pins;
-    void makePseudo();
-    void initPseudo();
+    vector<db::BoxOnLayer> relatedGuides;
+    vector<db::BoxOnLayer> pickedGuides;
+    vector<db::BoxOnLayer> paths;
+    void initGuidesAndPins();
     void initPPinBoxes();
+    void writePNet(const std::string &prefix);
 
 private:
     void getRouteGuideMapping();

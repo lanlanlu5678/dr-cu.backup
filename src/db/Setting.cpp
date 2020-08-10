@@ -25,6 +25,8 @@ void RrrIterSetting::update(int iter) {
         defaultGuideExpand = setting.defaultGuideExpand;
         wrongWayPointDensity = setting.wrongWayPointDensity;
         addDiffLayerGuides = false;
+        //partial ripup
+        diffLayerBound = 0;
     } else {
         defaultGuideExpand += iter * 2;
         wrongWayPointDensity = std::min(1.0, wrongWayPointDensity + 0.1);
@@ -32,6 +34,8 @@ void RrrIterSetting::update(int iter) {
             // high-effort mode (exclude million-net test case)
             addDiffLayerGuides = true;
         }
+        // partial ripup
+        if (iter < 4) diffLayerBound++;
     }
     converMinAreaToOtherVio = ((iter + 1) < setting.rrrIterLimit);
 }

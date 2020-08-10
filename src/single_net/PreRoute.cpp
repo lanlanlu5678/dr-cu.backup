@@ -1,4 +1,5 @@
 #include "PreRoute.h"
+#include "PartialRipup.h"
 
 db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
     // expand guides uniformally
@@ -7,24 +8,6 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
         int expand = localNet.dbNet.routeGuideVios[i] ? numPitchForGuideExpand : db::setting.defaultGuideExpand;
         database.expandBox(guides[i], numPitchForGuideExpand);
     }
-
-    // // add diff-layer guides (partial ripup)
-    // if (db::rrrIterSetting.addDiffLayerGuides) {  // && localNet.pseudoNetIdx < 0) {
-    //     int oriSize = guides.size();
-    //     for (int i = 0; i < oriSize; ++i) {
-    //         int j = guides[i].layerIdx;
-    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres) {
-    //             if (j > 2) guides.emplace_back(j - 1, guides[i]);  // do not add to layers 0, 1
-    //             if ((j + 1) < database.getLayerNum()) guides.emplace_back(j + 1, guides[i]);
-    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
-    //         }
-    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres * 2) {
-    //             if (j > 3) guides.emplace_back(j - 2, guides[i]);  // do not add to layers 0, 1
-    //             if ((j + 2) < database.getLayerNum()) guides.emplace_back(j + 2, guides[i]);
-    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
-    //         }
-    //     }
-    // }
 
     // expand guides by cross layer connection
     expandGuidesToMargin();
@@ -38,7 +21,7 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
         if (db::isSucc(status)) {
             // init localNet and check
             // partial ripup
-            if (localNet.pseudoNetIdx >= 0) localNet.initPseudo();
+            if (localNet.pseudoNetIdx>=0 && !localNet.gridTopo.empty()) localNet.initGuidesAndPins();
             localNet.initGridBoxes();
             localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
             localNet.initNumOfVertices();
@@ -47,12 +30,11 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
                 status = db::RouteStatus::FAIL_PIN_OUT_OF_GRID;
             } else if (!localNet.checkPinGuideConn()) {
                 status = db::RouteStatus::FAIL_DETACHED_PIN;
-            } else if (!checkGuideConnTrack() && localNet.pseudoNetIdx < 0) {
+            } else if (!checkGuideConnTrack()) {
                 status = db::RouteStatus::FAIL_DETACHED_GUIDE;
             }
         }
     }
-
     printWarnMsg(status, localNet.dbNet);
     return status;
 }
@@ -78,10 +60,20 @@ db::RouteStatus PreRoute::runIterative() {
 
     switch (status) {
         case +db::RouteStatus::FAIL_DETACHED_GUIDE:
-            log() << "Error: Exceed the guideExpandIterLimit, but Net " << name << " still FAIL_DETACHED_GUIDE\n";
+            database.debugPrintLock.lock();
+            log() << "Error: Exceed the guideExpandIterLimit, but Net " << localNet.idx
+            << "-" << localNet.pseudoNetIdx << " still FAIL_DETACHED_GUIDE\n";
+            if (--db::rrrIterSetting.writeNetNum > 0)
+                localNet.writePNet("guide_");
+            database.debugPrintLock.unlock();
             break;
         case +db::RouteStatus::FAIL_DETACHED_PIN:
-            log() << "Error: Net " << name << " FAIL_DETACHED_PIN\n";
+            database.debugPrintLock.lock();
+            log() << "Error: Net " << localNet.idx
+            << "-" << localNet.pseudoNetIdx << " FAIL_DETACHED_PIN\n";
+            if (--db::rrrIterSetting.writeNetNum > 0)
+                localNet.writePNet("pin_");
+            database.debugPrintLock.unlock();
             break;
         default:
             break;

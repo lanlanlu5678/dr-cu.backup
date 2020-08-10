@@ -89,6 +89,16 @@ void runISPD18Flow(const boost::program_options::variables_map& vm) {
     if (vm.count("dbInitHistUsageForPinAccess")) {
         db::setting.dbInitHistUsageForPinAccess = vm.at("dbInitHistUsageForPinAccess").as<double>();
     }
+    // partial ripup
+    if (vm.count("PPDebug")) {
+        db::rrrIterSetting.ppdebug = vm.at("PPDebug").as<bool>();
+    }
+    if (vm.count("writePNetNum")) {
+        db::rrrIterSetting.writeNetNum = vm.at("writePNetNum").as<int>();
+    }
+    if (vm.count("writeStat")) {
+        db::rrrIterSetting.writeStat = vm.at("writeStat").as<bool>();
+    }
 
     // Read benchmarks
     Rsyn::ISPD2018Reader reader;
@@ -175,6 +185,10 @@ int main(int argc, char* argv[]) {
                 ("dbPoorViaPenaltyCoeff", value<double>())
                 ("dbNondefaultViaPenaltyCoeff", value<double>())
                 ("dbInitHistUsageForPinAccess", value<double>())
+                // partial ripup
+                ("PPDebug", value<bool>())
+                ("writePNetNum", value<int>())
+                ("writeStat", value<bool>())
                 ;
         // clang-format on
         variables_map vm;

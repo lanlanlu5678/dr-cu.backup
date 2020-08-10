@@ -77,6 +77,12 @@ public:
     bool addDiffLayerGuides;
     bool converMinAreaToOtherVio;
 
+    // partial ripup
+    int diffLayerBound;
+    int writeNetNum = 10;
+    bool ppdebug = false;
+    bool writeStat = false;
+
     void update(int iter);
     void print() const;
 };

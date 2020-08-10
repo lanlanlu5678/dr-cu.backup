@@ -20,10 +20,8 @@ class Database : public RouteGrid, public NetList {
 public:
     utils::BoxT<DBU> dieRegion;
     
-    // // partial ripup : debug
-    // mutex_wrapper debugPrintLock;
-    // // std::shared_ptr<GridSteiner> backup;
-    // std::shared_ptr<GridSteiner> breakpoint;
+    // partial ripup : debug
+    mutex_wrapper debugPrintLock;
 
     void init();
     void clear() { RouteGrid::clear(); }
@@ -36,6 +34,9 @@ public:
     // get girdPinAccessBoxes
     // TODO: better way to differetiate same-layer and diff-layer girdPinAccessBoxes
     void getGridPinAccessBoxes(const Net& net, vector<vector<db::GridBoxOnLayer>>& gridPinAccessBoxes) const;
+
+    // Partial Ripup
+    DBU getPitch(int layerIdx) const {return layers[layerIdx].pitch;}
 
 private:
     RsynService rsynService;
