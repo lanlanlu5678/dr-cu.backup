@@ -57,9 +57,10 @@ public:
     void clearPostRouteResult();
     void clearResult();
 
-    // partial ripup
-    // pseudo net idx -> start pin of a pnet;
-    vector<std::shared_ptr<GridSteiner>> pinsOfPNets;
+    // PARTIAL RIPUP
+    vector<std::shared_ptr<db::GridSteiner>> vioNodes;
+    vector<std::shared_ptr<db::GridSteiner>> pnets;
+    vector<std::set<int>> ripupGuides;
 };
 
 class NetList {

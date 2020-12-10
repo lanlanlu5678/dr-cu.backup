@@ -14,7 +14,14 @@ vector<vector<int>> &Scheduler::schedule() {
     for (int id = 0; id < routers.size(); ++id) {
         routerIds.push_back(id);
     }
+    // PARITIAL RIPUP
     if (db::setting.multiNetScheduleSortAll) {
+        // std::sort(routerIds.begin(), routerIds.end(), [&](int lhs, int rhs) {
+        //     return (routers[lhs].dbNet.vioNearPin && !(routers[rhs].dbNet.vioNearPin));
+        // });
+        // std::sort(routerIds.begin(), routerIds.end(), [&](int lhs, int rhs) {
+        //     return (routers[lhs].localNet.estimatedNumOfVertices-routers[rhs].localNet.estimatedNumOfVertices) > 100;
+        // });
         std::sort(routerIds.begin(), routerIds.end(), [&](int lhs, int rhs) {
             return routers[lhs].localNet.estimatedNumOfVertices > routers[rhs].localNet.estimatedNumOfVertices;
         });

@@ -25,17 +25,34 @@ void RrrIterSetting::update(int iter) {
         defaultGuideExpand = setting.defaultGuideExpand;
         wrongWayPointDensity = setting.wrongWayPointDensity;
         addDiffLayerGuides = false;
-        //partial ripup
-        diffLayerBound = 0;
     } else {
         defaultGuideExpand += iter * 2;
+        // defaultGuideExpand += iter;
         wrongWayPointDensity = std::min(1.0, wrongWayPointDensity + 0.1);
-        if (database.nets.size() < 200000) {
-            // high-effort mode (exclude million-net test case)
-            addDiffLayerGuides = true;
-        }
-        // partial ripup
-        if (iter < 4) diffLayerBound++;
+
+        // PARTIAL RIPUP
+        constrainInGuide = false;
+        // if (iter < 3) {
+        //     quickFixMode = true;
+        //     extraCPs += 5;
+        //     extraTracks += 2;
+        //     oriMode = false;
+        // }
+        // else if (iter == 3) {
+        //     quickFixMode = false;
+        //     guideRipup = true;
+        //     addDiffLayerGuides = true;
+        //     // setting.numThreads = 0;
+        // }
+        // else {
+        //     // guideRipup = false;
+        //     // oriMode = true;
+        //     defaultGuideExpand -= iter * 2;
+        // }
+        addDiffLayerGuides = true;
+        oriMode = false;
+        guideRipup = true;
+        defaultGuideExpand = 14;
     }
     converMinAreaToOtherVio = ((iter + 1) < setting.rrrIterLimit);
 }
@@ -44,6 +61,10 @@ void RrrIterSetting::print() const {
     printlog("defaultGuideExpand =", defaultGuideExpand);
     printlog("wrongWayPointDensity =", wrongWayPointDensity);
     printlog("addDiffLayerGuides =", addDiffLayerGuides);
+    if (quickFixMode) {
+        printlog("extraTracks = ", extraTracks);
+        printlog("extraCrossPoints = ", extraCPs);
+    }
 }
 
 RrrIterSetting rrrIterSetting;

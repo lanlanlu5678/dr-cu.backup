@@ -25,16 +25,25 @@ public:
     int getCrossPointPenalty(int guideIdx, int trackIdx, int cpIdx) const;
 
     void print() const;  // db::NetBase::print() + RouteGuideGraph::print()
+    void printDebug() const;
+    void printPnetDetail() const;
 
-    // partial ripup: trim unviolated edges/boxes, make psudo pins.
-    int pseudoNetIdx = -1;
-    vector<std::shared_ptr<db::GridSteiner>> pins;
-    vector<db::BoxOnLayer> relatedGuides;
-    vector<db::BoxOnLayer> pickedGuides;
-    vector<db::BoxOnLayer> paths;
-    void initGuidesAndPins();
-    void initPPinBoxes();
-    void writePNet(const std::string &prefix);
+    // PARTIAL RIPUP
+    int pnetIdx = -1, repeat = 0;
+    // DBU maxLength;
+    vector<std::shared_ptr<db::GridSteiner>> pnetPins;
+    vector<db::BoxOnLayer> debugBox;
+    void initPNetPA();
+
+    void initPNet(int numPitch);
+    void traverse(std::shared_ptr<db::GridSteiner> node);
+    void quickRG();
+    void guideRipup();
+    void fixLongEdge(const db::GridSteiner &node, vector<db::BoxOnLayer> &picked);
+    void getGroups(const db::GridSteiner &node, std::set<int> &gids, vector<db::BoxOnLayer> &picked);
+    int getGroup(const utils::PointT<DBU> &p);
+
+    void initMaxLength();
 
 private:
     void getRouteGuideMapping();

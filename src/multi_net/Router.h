@@ -20,8 +20,7 @@ private:
 
     void printStat(bool major = false);
 
-    // partial ripup
-    int numOfPNets = 0;
-    // vector<db::mutex_wrapper> netsLock;
-    void partialRipUp(const vector<int>& netsToRoute);
+    // PARTIAL RIPUP
+    int numPNets, meanVioInLastIter;
+    void partialRipup(vector<int> &netsToRoute);
 };

@@ -1273,7 +1273,7 @@ void RouteGrid::fadeHistCost(const vector<int>& exceptedNets) {
     }
     std::unordered_set<int> exceptedNetSet;
     for (int netIdx : exceptedNets) exceptedNetSet.insert(netIdx);
-    // std::map<CostT, int> histWireUsage, histViaUsage;
+    std::map<CostT, int> histWireUsage, histViaUsage;
     for (int layerIdx = 0; layerIdx < getLayerNum(); ++layerIdx) {
         for (int trackIdx = 0; trackIdx < layers[layerIdx].numTracks(); ++trackIdx) {
             // wire

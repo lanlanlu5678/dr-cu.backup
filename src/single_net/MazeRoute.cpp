@@ -137,6 +137,14 @@ db::RouteStatus MazeRoute::route(int startPin) {
         }
 
         if (!dstVertex) {
+            // database.debugLock.lock();
+            // log() << localNet.idx << "_" << localNet.pnetIdx << " : ";
+            // for (int i=0; i<localNet.numOfPins(); i++) {
+            //     if (!visitedPin.count(i)) std::cout << i << " , ";
+            // }
+            // std::cout << std::endl;
+            // localNet.printDebug();
+            // database.debugLock.unlock();
             printWarnMsg(db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH, localNet.dbNet);
             return db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH;
         }

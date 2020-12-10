@@ -64,7 +64,6 @@ public:
 
     void makeItSilent();
     void adapt();
-
 };
 
 extern Setting setting;
@@ -77,14 +76,15 @@ public:
     bool addDiffLayerGuides;
     bool converMinAreaToOtherVio;
 
-    // partial ripup
-    int diffLayerBound;
-    int writeNetNum = 10;
-    bool ppdebug = false;
-    bool writeStat = false;
-
     void update(int iter);
     void print() const;
+
+    // PARTIAL RIPUP
+    int extraTracks = 3, extraCPs = 10;
+    bool quickFixMode = false;
+    bool guideRipup = false;
+    bool constrainInGuide = true;
+    bool oriMode = true;
 };
 
 extern RrrIterSetting rrrIterSetting;

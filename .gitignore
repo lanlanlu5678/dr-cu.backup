@@ -1,7 +1,6 @@
 .vscode/*
 build
 debug
-run*/
 scripts/__pycache__
 tags
 

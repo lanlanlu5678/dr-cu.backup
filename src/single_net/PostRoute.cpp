@@ -56,12 +56,6 @@ void PostRoute::getViaTypes() {
     getPinTapPoints();
     status = connectPins();
     if (!db::isSucc(status)) {
-        // partial ripup
-        // vector<std::shared_ptr<db::GridSteiner>> cpins;
-        // dbNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
-        //     if (node->children.empty()) cpins.push_back(node);
-        // });
-        log() << "ERROR : a fail net " << dbNet.idx << "\n";
         return;
     }
     dbNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {

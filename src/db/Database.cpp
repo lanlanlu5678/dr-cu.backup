@@ -31,7 +31,7 @@ void Database::init() {
 
     sliceRouteGuides();
 
-    constructRouteGuideRTrees();
+    // constructRouteGuideRTrees();
 
     log() << "Finish initializing database" << std::endl;
     log() << "MEM: cur=" << utils::mem_use::get_current() << "MB, peak=" << utils::mem_use::get_peak() << "MB"
