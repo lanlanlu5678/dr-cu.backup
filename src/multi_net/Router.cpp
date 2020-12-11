@@ -101,8 +101,6 @@ vector<int> Router::getNetsToRoute() {
     } else {
         for (auto& net : database.nets) {
             if (UpdateDB::checkViolation(net)) {
-                // TRY
-                if (net.vioNodes.size() < 4) continue;
                 netsToRoute.push_back(net.idx);
             }
         }

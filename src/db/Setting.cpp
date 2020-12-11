@@ -32,27 +32,27 @@ void RrrIterSetting::update(int iter) {
 
         // PARTIAL RIPUP
         constrainInGuide = false;
-        // if (iter < 3) {
-        //     quickFixMode = true;
-        //     extraCPs += 5;
-        //     extraTracks += 2;
-        //     oriMode = false;
-        // }
-        // else if (iter == 3) {
-        //     quickFixMode = false;
-        //     guideRipup = true;
-        //     addDiffLayerGuides = true;
-        //     // setting.numThreads = 0;
-        // }
-        // else {
-        //     // guideRipup = false;
-        //     // oriMode = true;
-        //     defaultGuideExpand -= iter * 2;
-        // }
-        addDiffLayerGuides = true;
-        oriMode = false;
-        guideRipup = true;
-        defaultGuideExpand = 14;
+        if (iter < 3) {
+            quickFixMode = true;
+            extraCPs += 5;
+            extraTracks += 2;
+            oriMode = false;
+        }
+        else if (iter == 3) {
+            quickFixMode = false;
+            guideRipup = true;
+            addDiffLayerGuides = true;
+            // setting.numThreads = 0;
+        }
+        else {
+            guideRipup = false;
+            oriMode = true;
+            defaultGuideExpand -= iter * 2;
+        }
+        // addDiffLayerGuides = true;
+        // oriMode = false;
+        // guideRipup = true;
+        // defaultGuideExpand = 14;
     }
     converMinAreaToOtherVio = ((iter + 1) < setting.rrrIterLimit);
 }

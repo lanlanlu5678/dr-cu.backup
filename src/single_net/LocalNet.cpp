@@ -305,7 +305,6 @@ void LocalNet::guideRipup() {
         }
     }
     // if (gids.size() > 1) fixLongEdge(*(pnetPins[0]), pickedGuides); // if long edge
-    // initIntersection(pnetPins, pickedGuides, routeGuides);
     initIntersection(*(pnetPins[0]), pickedGuides, routeGuides, pickedGuides.size());
     // debugBox = pickedGuides; // debug
     routeGuides = std::move(pickedGuides);
