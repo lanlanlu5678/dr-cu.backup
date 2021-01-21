@@ -32,17 +32,6 @@ public:
     // TODO: better way to differetiate same-layer and diff-layer girdPinAccessBoxes
     void getGridPinAccessBoxes(const Net& net, vector<vector<db::GridBoxOnLayer>>& gridPinAccessBoxes) const;
 
-    // construct RTrees for route guides of each net
-    void constructRouteGuideRTrees();
-
-    // PARTIAL RIPUP
-    int drcIdx = 0;
-    mutex_wrapper debugLock;
-    // drcRTrees drcMarks;
-    DBU getLayerPitch(int layerIdx) const {return layers[layerIdx].pitch;}
-    int getTrackLimit(int layerIdx) const {return layers[layerIdx].tracks.size()-1;}
-    int getCPLimit(int layerIdx) const {return layers[layerIdx].crossPoints.size()-1;}
-
 private:
     RsynService rsynService;
 
@@ -56,6 +45,9 @@ private:
 
     // slice route guide polygons along track direction
     void sliceRouteGuides();
+
+    // construct RTrees for route guides of each net
+    void constructRouteGuideRTrees();
 };
 
 }  //   namespace db

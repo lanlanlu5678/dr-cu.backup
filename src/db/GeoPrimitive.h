@@ -142,7 +142,6 @@ public:
         return layerIdx == point.layerIdx && trackRange.Contain(point.trackIdx) &&
                crossPointRange.Contain(point.crossPointIdx);
     }
-    bool includeDiffPoint(const GridPoint &point) const;
 
     // slice polygons along sliceDir
     // sliceDir: 0 for x/vertical, 1 for y/horizontal

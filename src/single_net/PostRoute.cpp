@@ -25,19 +25,52 @@ db::RouteStatus PostRoute::run() {
     return status;
 }
 
-db::RouteStatus PostRoute::connectPins() {
+db::RouteStatus PostRoute::connectPins(bool final) {
     db::RouteStatus netStatus = db::RouteStatus::SUCC_NORMAL;
 
     vector<vector<std::shared_ptr<db::GridSteiner>>> samePinTaps(dbNet.numOfPins());
     for (auto tap : pinTaps) {
         PinTapConnector pinTapConnector(*tap, dbNet, tap->pinIdx);
-        netStatus &= pinTapConnector.run();
+        const db::ViaType *type = nullptr;
+        if (final) {
+            if (tap->viaType) type = tap->viaType;
+            else if (tap->parent == nullptr) {
+                type = tap->children[0]->viaType;
+            }
+        }
+        netStatus &= pinTapConnector.run(type);
         if (!pinTapConnector.bestLink.empty()) {
             linkToPins[tap] = move(pinTapConnector.bestLink);
             samePinTaps[tap->pinIdx].push_back(tap);  // only consider those with links
             if (pinTapConnector.bestVio > 0) {
                 db::routeStat.increment(db::RouteStage::POST, db::MiscRouteEvent::LINK_PIN_VIO, 1);
             }
+        }
+        if (pinTapConnector.pinViaMoved) {
+            auto temp = tap;
+            if (tap->parent) {
+                tap = tap->parent;
+                for (auto it=tap->children.begin(); it!=tap->children.end(); it++) {
+                    if (*it == temp) {
+                        *it = tap->children.back();
+                        tap->children.pop_back();
+                        break;
+                    }
+                }
+            }
+            else {
+                tap = tap->children[0];
+                tap->parent = nullptr;
+                tap->viaType = nullptr;
+                for (auto it=dbNet.gridTopo.begin(); it!=dbNet.gridTopo.end(); it++) {
+                    if (*it == temp) {
+                        *it = tap;
+                        break;
+                    }
+                }
+            }
+            tap->pinIdx = temp->pinIdx;
+            tap->fakePin = true;
         }
         if (pinTapConnector.bestLinkVia.first != -1) {
             linkViaToPins[tap] = pinTapConnector.bestLinkVia;
@@ -54,7 +87,7 @@ db::RouteStatus PostRoute::connectPins() {
 void PostRoute::getViaTypes() {
     db::RouteStatus status = db::RouteStatus::SUCC_NORMAL;
     getPinTapPoints();
-    status = connectPins();
+    status = connectPins(false);
     if (!db::isSucc(status)) {
         return;
     }

@@ -20,7 +20,7 @@ private:
     void getPinTapPoints();
 
     // 2. Connect taps to pins by L-shape links
-    db::RouteStatus connectPins();
+    db::RouteStatus connectPins(bool final = true);
 
     // 3. Get final topo (with metal fill)
     void getTopo();

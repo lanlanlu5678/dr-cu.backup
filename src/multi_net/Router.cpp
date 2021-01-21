@@ -1,6 +1,5 @@
 #include "Router.h"
 #include "Scheduler.h"
-#include "single_net/PartialRipup.h"
 
 const MTStat& MTStat::operator+=(const MTStat& rhs) {
     auto dur = rhs.durations;
@@ -29,17 +28,12 @@ ostream& operator<<(ostream& os, const MTStat mtStat) {
 
 void Router::run() {
     allNetStatus.resize(database.nets.size(), db::RouteStatus::FAIL_UNPROCESSED);
-
-    // PartialRipup::preProcessRouteGuides();
-    database.constructRouteGuideRTrees();
-
     for (iter = 0; iter < db::setting.rrrIterLimit; iter++) {
         log() << std::endl;
         log() << "################################################################" << std::endl;
         log() << "Start RRR iteration " << iter << std::endl;
         log() << std::endl;
         db::routeStat.clear();
-        db::rrrIterSetting.update(iter);
         vector<int> netsToRoute = getNetsToRoute();
         if (netsToRoute.empty()) {
             if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
@@ -48,14 +42,11 @@ void Router::run() {
             }
             break;
         }
+        db::rrrIterSetting.update(iter);
         if (iter > 0) {
             // updateCost should before ripup, otherwise, violated nets have gone
             updateCost(netsToRoute);
-            if (db::rrrIterSetting.oriMode)
-                ripup(netsToRoute);
-            else
-                // PARTIAL RIPUP
-                partialRipup(netsToRoute);
+            ripup(netsToRoute);
         }
         database.statHistCost();
         if (db::setting.rrrIterLimit > 1) {
@@ -73,6 +64,13 @@ void Router::run() {
         if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
             printStat(db::setting.rrrWriteEachIter);
         }
+        // if (db::setting.rrrWriteEachIter) {
+        //     std::string fn = "iter" + std::to_string(iter) + "_" + db::setting.outputFile;
+        //     printlog("Write result of RRR iter", iter, "to", fn, "...");
+        //     finish();
+        //     database.writeDEF(fn);
+        //     unfinish();
+        // }
     }
     finish();
     log() << std::endl;
@@ -86,16 +84,10 @@ void Router::run() {
 }
 
 vector<int> Router::getNetsToRoute() {
-    // PARTIAL RIPUP
-    // if (db::rrrIterSetting.addDiffLayerGuides) {
-    //     database.drcIdx = 0;
-    //     database.drcMarks.clear();
-    //     database.drcMarks.resize(database.getLayerNum());
-    // }
-
     vector<int> netsToRoute;
     if (iter == 0) {
         for (int i = 0; i < database.nets.size(); i++) {
+            // if (database.nets[i].getName() == "net8984") netsToRoute.push_back(i);
             netsToRoute.push_back(i);
         }
     } else {
@@ -104,15 +96,7 @@ vector<int> Router::getNetsToRoute() {
                 netsToRoute.push_back(net.idx);
             }
         }
-        log() << "Finish vio checking." << std::endl;
     }
-
-    // PARTIAL RIPUP
-    numPNets = 0;
-    // if (iter > 0 && db::rrrIterSetting.oriMode)
-    // if (db::rrrIterSetting.addDiffLayerGuides)
-    //     // PartialRipup::reOrderAndGuideMark(netsToRoute);
-    //     PartialRipup::markOfGuides(netsToRoute);
 
     return netsToRoute;
 }
@@ -129,37 +113,16 @@ void Router::updateCost(const vector<int>& netsToRoute) {
     database.fadeHistCost(netsToRoute);
 }
 
-// PARTIAL RIPUP
-void Router::partialRipup(vector<int> &nets) {
-    // if (iter == 3)
-    //     db::setting.numThreads = 0;
-    PartialRipup::extractPseudoNets(nets);
-    for (int i : nets) {
-        numPNets += database.nets[i].pnets.size();
-        allNetStatus[i] = db::RouteStatus::FAIL_UNPROCESSED;
-    }
-    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE)
-        log() << "From " << nets.size() << " nets, " << numPNets << " PNets found" << std::endl;
-}
-
 void Router::route(const vector<int>& netsToRoute) {
-    // init SingleNetRouters, PARTIAL RIPUP
+    // init SingleNetRouters
     vector<SingleNetRouter> routers;
-    if (db::rrrIterSetting.oriMode) numPNets = netsToRoute.size();
-    routers.reserve(numPNets);
-    for (int i : netsToRoute) {
-        if (database.nets[i].pnets.empty())
-            routers.emplace_back(database.nets[i]);
-        else {
-            for (int pnet=0; pnet<int(database.nets[i].pnets.size()); pnet++) {
-                routers.emplace_back(database.nets[i]);
-                routers.back().localNet.pnetIdx = pnet;
-            }
-        }
+    routers.reserve(netsToRoute.size());
+    for (int netIdx : netsToRoute) {
+        routers.emplace_back(database.nets[netIdx]);
     }
 
     // pre route
-    auto preMT = runJobsMT(numPNets, [&](int netIdx) { routers[netIdx].preRoute(); });
+    auto preMT = runJobsMT(netsToRoute.size(), [&](int netIdx) { routers[netIdx].preRoute(); });
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         printlog("preMT", preMT);
         printStat();
@@ -167,7 +130,7 @@ void Router::route(const vector<int>& netsToRoute) {
 
     // schedule
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
-        log() << "Start multi-thread scheduling. There are " << numPNets << " nets to route." << std::endl;
+        log() << "Start multi-thread scheduling. There are " << netsToRoute.size() << " nets to route." << std::endl;
     }
     Scheduler scheduler(routers);
     const vector<vector<int>>& batches = scheduler.schedule();
@@ -216,33 +179,6 @@ void Router::route(const vector<int>& netsToRoute) {
         }
         iBatch++;
     }
-
-    // PARTIAL RIPUP
-    vector<vector<int>> rids(9);
-    for (size_t i=0; i<routers.size(); i++) {
-        const auto &r = routers[i];
-        int sid = r.status._to_integral();
-        rids[sid].push_back(i);
-    }
-    log() << std::endl;
-    for (size_t i=2; i<9; i++) {
-        size_t j = rids[i].size();
-        if (j == 0) continue;
-        log() << routers[rids[i][0]].status._to_string() << " : " << j << std::endl;
-        log() << "--------------------------------------" << std::endl;
-        log() << " ";
-        if (j > 10) j = 10;
-        // while (j > 0) {
-        //     j--;
-        for (size_t k=0; k<j; k++) {
-            const auto &r = routers[rids[i][k]];
-            std::cout << r.dbNet.idx << "_" << r.localNet.pnetIdx << ", ";
-            r.localNet.printDebug();
-        }
-        std::cout << std::endl;
-        log() << std::endl;
-    }
-
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         printlog("allMazeMT", allMazeMT);
         printlog("allCommitMT", allCommitMT);
@@ -311,7 +247,7 @@ void Router::finish() {
         printlog("postMT", postMT);
     }
     // final open fix
-    if (db::setting.fixOpenBySST && false) {
+    if (db::setting.fixOpenBySST) {
         int count = 0;
         for (auto& net : database.nets) {
             if (net.defWireSegments.empty() && net.numOfPins() > 1) {

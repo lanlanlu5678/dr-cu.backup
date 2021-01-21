@@ -74,23 +74,6 @@ ostream& operator<<(ostream& os, const GridBoxOnLayer& gb) {
     return os;
 }
 
-bool GridBoxOnLayer::includeDiffPoint(const GridPoint &point) const {
-    if (layerIdx == point.layerIdx)
-        return trackRange.Contain(point.trackIdx) &&
-            crossPointRange.Contain(point.crossPointIdx);
-    else if (layerIdx-point.layerIdx == 1) {
-        const auto &upper = database.getUpper(point);
-        return trackRange.Contain(upper.trackIdx) &&
-            crossPointRange.Contain(upper.crossPointIdx);
-    }
-    else if (point.layerIdx-layerIdx == 1) {
-        const auto &lower = database.getLower(point);
-        return trackRange.Contain(lower.trackIdx) &&
-            crossPointRange.Contain(lower.crossPointIdx);
-    }
-    else return false;
-}
-
 // slice polygons along sliceDir
 // sliceDir: 0 for x/vertical, 1 for y/horizontal
 void GridBoxOnLayer::sliceGridPolygons(vector<GridBoxOnLayer>& boxes) {

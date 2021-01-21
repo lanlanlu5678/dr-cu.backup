@@ -57,10 +57,7 @@ public:
     void clearPostRouteResult();
     void clearResult();
 
-    // PARTIAL RIPUP
-    vector<std::shared_ptr<db::GridSteiner>> vioNodes;
-    vector<std::shared_ptr<db::GridSteiner>> pnets;
-    vector<std::set<int>> ripupGuides;
+    // db::GridPoint movePinVia(std::shared_ptr<db::GridSteiner> tap);
 };
 
 class NetList {

@@ -19,8 +19,4 @@ private:
     void unfinish();
 
     void printStat(bool major = false);
-
-    // PARTIAL RIPUP
-    int numPNets, meanVioInLastIter;
-    void partialRipup(vector<int> &netsToRoute);
 };

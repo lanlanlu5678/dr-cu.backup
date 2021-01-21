@@ -1,32 +1,30 @@
 #include "PreRoute.h"
 
 db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
-    if (!(db::rrrIterSetting.quickFixMode)) {
-        for (auto &g : localNet.routeGuides)
-            database.expandBox(g, numPitchForGuideExpand);
+    // expand guides uniformally
+    auto& guides = localNet.routeGuides;
+    for (int i = 0; i < guides.size(); ++i) {
+        int expand = localNet.dbNet.routeGuideVios[i] ? numPitchForGuideExpand : db::setting.defaultGuideExpand;
+        database.expandBox(guides[i], numPitchForGuideExpand);
     }
 
-    if (!(localNet.pnetIdx < 0))
-        localNet.initPNet(numPitchForGuideExpand); // guides & pins
-
-
-    // if (db::rrrIterSetting.addDiffLayerGuides) {
-    //     auto& guides = localNet.routeGuides;
-    //     int oriSize = guides.size();
-    //     for (int i = 0; i < oriSize; ++i) {
-    //         int j = guides[i].layerIdx;
-    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres) {
-    //             if (j > 2) guides.emplace_back(j - 1, guides[i]);  // do not add to layers 0, 1
-    //             if ((j + 1) < database.getLayerNum()) guides.emplace_back(j + 1, guides[i]);
-    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
-    //         }
-    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres * 2) {
-    //             if (j > 3) guides.emplace_back(j - 2, guides[i]);  // do not add to layers 0, 1
-    //             if ((j + 2) < database.getLayerNum()) guides.emplace_back(j + 2, guides[i]);
-    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
-    //         }
-    //     }
-    // }
+    // add diff-layer guides
+    if (db::rrrIterSetting.addDiffLayerGuides) {
+        int oriSize = guides.size();
+        for (int i = 0; i < oriSize; ++i) {
+            int j = guides[i].layerIdx;
+            if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres) {
+                if (j > 2) guides.emplace_back(j - 1, guides[i]);  // do not add to layers 0, 1
+                if ((j + 1) < database.getLayerNum()) guides.emplace_back(j + 1, guides[i]);
+                db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
+            }
+            if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres * 2) {
+                if (j > 3) guides.emplace_back(j - 2, guides[i]);  // do not add to layers 0, 1
+                if ((j + 2) < database.getLayerNum()) guides.emplace_back(j + 2, guides[i]);
+                db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
+            }
+        }
+    }
 
     // expand guides by cross layer connection
     expandGuidesToMargin();
@@ -41,19 +39,15 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
             // init localNet and check
             localNet.initGridBoxes();
             localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
-            // if (localNet.dbNet.oriVertice == 0) {
-                localNet.initNumOfVertices();
-            // }
-            // else
-            //     localNet.estimatedNumOfVertices = localNet.dbNet.oriVertice;
+            localNet.initNumOfVertices();
 
             if (!localNet.checkPin()) {
                 status = db::RouteStatus::FAIL_PIN_OUT_OF_GRID;
             } else if (!localNet.checkPinGuideConn()) {
                 status = db::RouteStatus::FAIL_DETACHED_PIN;
-            }/* else if (!checkGuideConnTrack()) {
+            } else if (!checkGuideConnTrack()) {
                 status = db::RouteStatus::FAIL_DETACHED_GUIDE;
-            }*/
+            }
         }
     }
 
@@ -85,7 +79,7 @@ db::RouteStatus PreRoute::runIterative() {
             log() << "Error: Exceed the guideExpandIterLimit, but Net " << name << " still FAIL_DETACHED_GUIDE\n";
             break;
         case +db::RouteStatus::FAIL_DETACHED_PIN:
-            log() << "Error: Net " << localNet.idx << "_" << localNet.pnetIdx << " FAIL_DETACHED_PIN\n";
+            log() << "Error: Net " << name << " FAIL_DETACHED_PIN\n";
             break;
         default:
             break;

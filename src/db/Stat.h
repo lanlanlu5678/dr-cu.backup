@@ -39,6 +39,7 @@ BETTER_ENUM(MiscRouteEvent,
             REMOVE_TRACK_SWITCH_HORSESHOE,
             // post route
             LINK_PIN_VIO,
+            MOVE_PIN_VIA,
             FILL_SAME_NET_SPACE,
             REMOVE_CORNER);
 

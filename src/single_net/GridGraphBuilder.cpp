@@ -206,13 +206,8 @@ void GridGraphBuilder::connectGuide(int guideIdx) {
             graph.addEdge(u, v, FORWARD, 0);
         } else {
             db::CostT cost = database.getWireSegmentCost({layerIdx, trackIdx, {beginCP + 1, endCP - 1}}, netIdx);
-            if (db::rrrIterSetting.constrainInGuide) {
-                int penalty = localNet.getWireSegmentPenalty(guideIdx, trackIdx, beginCP, endCP);
-                graph.addEdge(u, v, FORWARD, cost * (1 + penalty));
-            }
-            else {
-                graph.addEdge(u, v, FORWARD, cost);
-            }
+            int penalty = localNet.getWireSegmentPenalty(guideIdx, trackIdx, beginCP, endCP);
+            graph.addEdge(u, v, FORWARD, cost * (1 + penalty));
         }
     };
 
@@ -227,13 +222,8 @@ void GridGraphBuilder::connectGuide(int guideIdx) {
         for (int t = trackRange.low; t <= trackRange.high; t++) {
             int vertex = guideToVertex(guideIdx, t, cpRange.low);
             db::CostT cost = database.getWireSegmentCost({layerIdx, t, cpRange}, netIdx);
-            if (db::rrrIterSetting.constrainInGuide) {
-                int penalty = localNet.getCrossPointPenalty(guideIdx, t, cpRange.low);
-                graph.setVertexCost(vertex, cost * (1 + penalty));
-            }
-            else {
-                graph.setVertexCost(vertex, cost);
-            }
+            int penalty = localNet.getCrossPointPenalty(guideIdx, t, cpRange.low);
+            graph.setVertexCost(vertex, cost * (1 + penalty));
         }
         return;
     }
@@ -277,13 +267,8 @@ void GridGraphBuilder::connectGuide(int guideIdx) {
             for (int c = interval.low; c <= interval.high; c++) {
                 int vertex = guideToVertex(guideIdx, t, c);
                 db::CostT cost = crossPointCost[c - interval.low];
-                if (db::rrrIterSetting.constrainInGuide) {
-                    int penalty = localNet.getCrossPointPenalty(guideIdx, t, c);
-                    graph.setVertexCost(vertex, cost * (1 + penalty));
-                }
-                else {
-                    graph.setVertexCost(vertex, cost);
-                }
+                int penalty = localNet.getCrossPointPenalty(guideIdx, t, c);
+                graph.setVertexCost(vertex, cost * (1 + penalty));
             }
         }
     }
@@ -316,15 +301,10 @@ void GridGraphBuilder::connectTwoGuides(int guideIdx1, int guideIdx2) {
             int v = guideToVertex(lowerIdx, lowerTrackIdx, lowerCPIdx);
 
             db::CostT edgeCost = database.getViaCost({viaBox.lower.layerIdx, lowerTrackIdx, lowerCPIdx}, localNet.idx);
-            if (db::rrrIterSetting.constrainInGuide) {
-                int penalty =
-                    localNet.getViaPenalty(upperIdx, upperTrackIdx, upperCPIdx, lowerIdx, lowerTrackIdx, lowerCPIdx);
+            int penalty =
+                localNet.getViaPenalty(upperIdx, upperTrackIdx, upperCPIdx, lowerIdx, lowerTrackIdx, lowerCPIdx);
 
-                graph.addEdge(u, v, DOWN, edgeCost * (1 + penalty));
-            }
-            else {
-                graph.addEdge(u, v, DOWN, edgeCost);
-            }
+            graph.addEdge(u, v, DOWN, edgeCost * (1 + penalty));
         }
     }
 }

@@ -78,13 +78,6 @@ public:
 
     void update(int iter);
     void print() const;
-
-    // PARTIAL RIPUP
-    int extraTracks = 3, extraCPs = 10;
-    bool quickFixMode = false;
-    bool guideRipup = false;
-    bool constrainInGuide = true;
-    bool oriMode = true;
 };
 
 extern RrrIterSetting rrrIterSetting;
