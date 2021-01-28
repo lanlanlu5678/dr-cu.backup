@@ -1,8 +1,15 @@
 #include "PinTapConnector.h"
 
-db::RouteStatus PinTapConnector::run(const db::ViaType *tapViaType) {
+db::RouteStatus PinTapConnector::run() {
+    // 0 Try shift via
+    const auto &layer = database.getLayer(tap.layerIdx);
+    const auto &tapXY = database.getLoc(tap);
+    // if (tap.layerIdx == 0 && tapViaType != nullptr) {
+    //     if (noNeedExtraLink(tapViaType, tapXY, dbNet.pinAccessBoxes[pinIdx]))
+    //         return db::RouteStatus::SUCC_NORMAL;
+    // }
+
     // 1 Get bestBox
-    auto tapXY = database.getLoc(tap);
     db::BoxOnLayer bestBox;
     db::RouteStatus status = getBestPinAccessBox(tapXY, tap.layerIdx, dbNet.pinAccessBoxes[pinIdx], bestBox);
     if (status != +db::RouteStatus::SUCC_CONN_EXT_PIN) {
@@ -10,11 +17,6 @@ db::RouteStatus PinTapConnector::run(const db::ViaType *tapViaType) {
     }
 
     // 2 Get tapsOnPin
-    const auto &layer = database.getLayer(tap.layerIdx);
-    if (tap.layerIdx == 0 && tapViaType != nullptr) {
-        if (noNeedExtraLink(tapViaType, tapXY, dbNet.pinAccessBoxes[pinIdx]))
-            return db::RouteStatus::SUCC_NORMAL;
-    }
     std::vector<utils::PointT<DBU>> tapsOnPin;
     if (bestBox.layerIdx != tap.layerIdx) {
         tapsOnPin.emplace_back(bestBox.cx(), bestBox.cy());
@@ -157,135 +159,136 @@ utils::BoxT<DBU> PinTapConnector::getLinkMetal(const utils::SegmentT<DBU> &link,
     return box;
 }
 
-bool PinTapConnector::noNeedExtraLink(const db::ViaType *type,
-                                        const utils::PointT<DBU> &tapLoc,
-                                        const vector<db::BoxOnLayer> &pinABs) {
-    const auto &viaBox = type->getShiftedBotMetal(tapLoc);
-    size_t numVio = 0, dir = 0, bsize = pinABs.size();
-    utils::BoxT<DBU> connBox;
-    vector<size_t> closeBoxIdx;
-    DBU temp = 0, width = database.getLayer(0).width, space = database.getLayer(0).getParaRunSpace(0);
-    for (size_t i=0; i<bsize; i++) {
-        const auto &pbox = pinABs[i];
-        if (pbox.layerIdx > 0) continue;
-        if (utils::Dist(viaBox, pbox) < space) {
-            const auto &its = viaBox.IntersectWith(pbox);
-            if (its.IsValid()) {
-                connBox.x.low = std::min<DBU>(connBox.x.low, pbox.x.low);
-                connBox.x.high = std::max<DBU>(connBox.x.high, pbox.x.high);
-                connBox.y.low = std::min<DBU>(connBox.y.low, pbox.y.low);
-                connBox.y.high = std::max<DBU>(connBox.y.high, pbox.y.high);
-            }
-            else if (its.x.IsValid() || its.y.IsValid())
-                closeBoxIdx.push_back(i);   // except connected box
-        }
-    }
+// bool PinTapConnector::noNeedExtraLink(const db::ViaType *type,
+//                                         const utils::PointT<DBU> &tapLoc,
+//                                         const vector<db::BoxOnLayer> &pinABs) {
+//     const auto &viaBox = type->getShiftedBotMetal(tapLoc);
+//     int numVio = 0, dir = 0;
+//     utils::BoxT<DBU> connBox;
+//     vector<size_t> connIdx;
+//     DBU temp = 0, width = database.getLayer(0).width, space = database.getLayer(0).getParaRunSpace(0);
 
-    // if (!closeBoxIdx.empty()) {
-    //     for (size_t i=0; i<bsize; i++) {
-    //         if (viaBox.HasIntersectWith(pinABs[i]))
-    //             closeBoxIdx.push_back(i);
-    //     }
-    //     legalPinVia(type, tapLoc, closeBoxIdx);
-    //     if (pinViaMoved) {
-    //         bestLinkVia.first = 0;
-    //         db::routeStat.increment(db::RouteStage::POST, db::MiscRouteEvent::MOVE_PIN_VIA, 1);
-    //         // log() << " *** " << dbNet.getName();
-    //         // printf("    net %d move pin %d via ***\n", dbNet.idx, pinIdx);
-    //         return true;
-    //     }
-    // }
+//     for (size_t i=0; i<pinABs.size(); i++) {
+//         const auto &pbox = pinABs[i];
+//         if (pbox.layerIdx > 0) continue;
+//         if (utils::Dist(viaBox, pbox) < space) {
+//             connIdx.push_back(i);
+//             if (viaBox.HasIntersectWith(pbox)) {
+//                 connBox.x.low = std::min<DBU>(connBox.x.low, pbox.x.low);
+//                 connBox.x.high = std::max<DBU>(connBox.x.high, pbox.x.high);
+//                 connBox.y.low = std::min<DBU>(connBox.y.low, pbox.y.low);
+//                 connBox.y.high = std::max<DBU>(connBox.y.high, pbox.y.high);
+//             }
+//         }
+//     }
 
-    if (!connBox.IsValid()) return false;
+//     // try shift pin via
+//     if (connIdx.empty()) return false;
+//     tryShift(tapLoc, connIdx);
+//     if (pinViaShifted) {
+//         db::routeStat.increment(db::RouteStage::POST, db::MiscRouteEvent::MOVE_PIN_VIA, 1);
+//         return true;
+//     }
 
-    const auto &its = viaBox.IntersectWith(connBox);
-    if (its.x.range() < width && its.y.range() < width) {
-        if (viaBox.x.range() > viaBox.y.range()) {
-            temp = its.x.range();
-        }
-        else {
-            dir = 1;
-            temp = its.y.range();
-        }
-        temp = width - temp;
-        if (temp > 0) {
-            connBox = viaBox;
-            if (its[dir].low == viaBox[dir].low)
-                connBox[dir].low -= temp;
-            else
-                connBox[dir].high += temp;
-            database.writeDEFFillRect(database.nets[dbNet.idx], connBox, 0);
-        }
-    }
-    return true;
-}
+//     if (!connBox.IsValid()) return false;
+//     const auto &its = viaBox.IntersectWith(connBox);
+//     if (its.x.range() < width && its.y.range() < width) {
+//         if (viaBox.x.range() > viaBox.y.range()) {
+//             temp = its.x.range();
+//         }
+//         else {
+//             dir = 1;
+//             temp = its.y.range();
+//         }
+//         temp = width - temp;
+//         if (temp > 0) {
+//             connBox = viaBox;
+//             if (its[dir].low == viaBox[dir].low)
+//                 connBox[dir].low -= temp;
+//             else
+//                 connBox[dir].high += temp;
+//             database.writeDEFFillRect(database.nets[dbNet.idx], connBox, 0);
+//         }
+//     }
+//     return true;
+// }
 
-void PinTapConnector::legalPinVia(const db::ViaType *type,
-                                    const utils::PointT<DBU> &tapLoc,
-                                    const vector<size_t> &closeBoxIdx) {
-    const auto &pabs = dbNet.pinAccessBoxes[pinIdx];
-    DBU minX = 100, minY = 200, distX = 0, distY = 0;
-    const auto &oriBox = type->getShiftedBotMetal(tapLoc);
-    vector<std::pair<int, int>> targets(2, {0, -1});
-    for (auto i : closeBoxIdx) {
-        const auto &pbox = pabs[i];
-        distX = abs(tapLoc.x - pbox.cx());
-        distY = abs(tapLoc.y - pbox.cy());
-        if (distX < minX &&
-            (oriBox.x.low < pbox.x.low || oriBox.x.high > pbox.x.high) &&
-            oriBox.y.HasIntersectWith(pbox.y)) {
-            minX = distX;
-            targets[0].second = i;
-        }
-        if (distY < minY &&
-            (oriBox.y.low < pbox.y.low || oriBox.y.high > pbox.y.high) &&
-            oriBox.x.HasIntersectWith(pbox.x)) {
-            minY = distY;
-            targets[1].second = i;
-        }
-    }
+// void PinTapConnector::tryShift(const utils::PointT<DBU> &tapLoc, const vector<size_t> &connIdx) {
+//     std::shared_ptr<db::GridSteiner> nei1;
+//     const auto &pabs = dbNet.pinAccessBoxes[pinIdx];
+//     int dir = 1 - database.getLayerDir(1);
+//     std::multimap<int, size_t> canPior;
+//     vector<utils::PointT<DBU>> canLocs;
+//     vector<const db::ViaType *> canTypes;
+//     DBU hwidth = database.getLayer(1).width * 0.5;
+//     // check branches
+//     if (tapPtr->parent) {
+//         nei1 = tapPtr->parent;
+//     }
+//     else {
+//         nei1 = tapPtr->children[0];
+//     }
+    
+//     // get candidates
+//     for (size_t id : connIdx) {
+//         const auto &pbox = pabs[id];
+//         bestType = database.getBestViaTypeForShift(pbox);
+//         if (bestType == nullptr) continue;
+//         const auto &bot = bestType->getShiftedBotMetal(tapLoc);
+//         auto cand = tapLoc;
+//         for (int tdir=0; tdir<2; tdir++) {
+//             if (bot[tdir].low < pbox[tdir].low)
+//                 cand[tdir] += (pbox[tdir].low - bot[tdir].low);
+//             else if (bot[tdir].high > pbox[tdir].high)
+//                 cand[tdir] += (pbox[tdir].high - bot[tdir].high);
+//         }
+//         int pior = 0;
+//         if (cand[dir] != tapLoc[dir]) pior += 1;
+//         if (cand[1-dir] != tapLoc[dir]) pior += 2;
+//         if (pior) {
+//             canLocs.push_back(cand);
+//             canTypes.push_back(bestType);
+//             canPior.insert({pior, canLocs.size()-1});
+//         }
+//     }
+//     if (canLocs.empty()) return;
+    
+//     // get surrounding routed box
+//     const auto &routedBoxes = database.getRoutedBox(*nei1, dbNet.idx);
 
-    const auto &routedBox = database.getRoutedBox(database.getUpper(tap), dbNet.idx);
-    // if (dbNet.getName() == "net9679" || dbNet.getName() == "net9699") {
-    //     log() << std::endl;
-    //     log() << " ------ " << dbNet.getName();
-    //     printf(" (%d) pin %d legalPinVia ------\n", dbNet.idx, pinIdx);
-    //     log() << " pin loc : " << tapLoc << std::endl;
-    //     printf(" X dir target box : %d    ", targets[0].second);
-    //     if (targets[0].second > -1) std::cout << pabs[targets[0].second];
-    //     printf("\n");
-    //     printf(" Y dir target box : %d    ", targets[1].second);
-    //     if (targets[1].second > -1) std::cout << pabs[targets[1].second];
-    //     printf("\n");
-    //     printf("  routed box :\n");
-    //     for (const auto &rbox : routedBox)
-    //         log() << "      " << rbox << std::endl;
-    //     printf("\n");
-    // }
-
-    if (database.getLayerDir(1) == X) {
-        std::swap(targets[0], targets[1]);
-        targets[0].first = 1;
-    }
-    else
-        targets[1].first = 1;
-
-    for (const auto &i : targets) {
-        if (i.second < 0) continue;
-        const auto &pbox = pabs[i.second];
-        DBU disPlacement = pbox[i.first].center() - tapLoc[i.first],
-            diff = abs(pbox[i.first].range() - oriBox[i.first].range()) * 0.5;
-        if (disPlacement > 0) disPlacement -= diff;
-        else disPlacement += diff;
-        utils::PointT<DBU> viaCan = tapLoc;
-        viaCan[i.first] += disPlacement;
-        const auto &viaBox = type->getShiftedTopMetal(viaCan);
-        db::BoxOnLayer newViaBox(1, viaBox.UnionWith(type->getShiftedTopMetal(tapLoc)));
-        const auto &regions = database.getAccurateMetalRectForbidRegions(newViaBox);
-        if (database.countOvlp(newViaBox, regions, routedBox) == 0) {
-            bestLinkVia.second = viaCan;
-            pinViaMoved = true;
-            break;
-        }
-    }
-}
+//     // try candidates
+//     utils::BoxT<DBU> oriMetal(tapLoc.x-hwidth, tapLoc.y-hwidth, tapLoc.x+hwidth, tapLoc.y+hwidth);
+//     for (const auto &pair : canPior) {
+//         size_t i = pair.second;
+//         const auto &newViaUpperBox = canTypes[i]->getShiftedTopMetal(canLocs[i]);
+//         db::BoxOnLayer newUpperBox(1, newViaUpperBox.UnionWith(oriMetal));
+//         if (database.getFixedMetalVio(newUpperBox, dbNet.idx) > 0) continue;
+//         const auto &regions = database.getAccurateMetalRectForbidRegions(newUpperBox);
+//         if (database.countOvlp(newUpperBox, regions, routedBoxes) == 0) {
+//             // update grid topo
+//             if (tapPtr->parent) {
+//                 for (auto it=nei1->children.begin(); it!=nei1->children.end(); it++) {
+//                     if (*it == tapPtr) {
+//                         *it = nei1->children.back();
+//                         nei1->children.pop_back();
+//                         break;
+//                     }
+//                 }
+//             }
+//             else
+//                 nei1->parent = nullptr;
+//             nei1->pinIdx = pinIdx;
+//             nei1->fakePin = true;
+//             tapPtr = nei1;
+//             // get extra link
+//             auto turn = tapLoc;
+//             turn[dir] = canLocs[i][dir];
+//             bestLink = getLinkFromPts({tapLoc, turn, canLocs[i]});
+//             bestLinkVia.first = 0;
+//             bestLinkVia.second = canLocs[i];
+//             bestType = canTypes[i];
+//             pinViaShifted = true;
+//             break;
+//         }
+//     }
+// }

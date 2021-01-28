@@ -14,6 +14,7 @@ db::RouteStatus PostRoute::run() {
 
     getPinTapPoints();
 
+    pinViaPatches.resize(dbNet.numOfPins());
     status = connectPins();
     if (!db::isSucc(status)) {
         return status;
@@ -30,15 +31,11 @@ db::RouteStatus PostRoute::connectPins(bool final) {
 
     vector<vector<std::shared_ptr<db::GridSteiner>>> samePinTaps(dbNet.numOfPins());
     for (auto tap : pinTaps) {
-        PinTapConnector pinTapConnector(*tap, dbNet, tap->pinIdx);
-        const db::ViaType *type = nullptr;
-        if (final) {
-            if (tap->viaType) type = tap->viaType;
-            else if (tap->parent == nullptr) {
-                type = tap->children[0]->viaType;
-            }
+        if (final && handlePinVia(*tap)) {
+            continue;
         }
-        netStatus &= pinTapConnector.run(type);
+        PinTapConnector pinTapConnector(*tap, dbNet, tap->pinIdx);
+        netStatus &= pinTapConnector.run();
         if (!pinTapConnector.bestLink.empty()) {
             linkToPins[tap] = move(pinTapConnector.bestLink);
             samePinTaps[tap->pinIdx].push_back(tap);  // only consider those with links
@@ -46,34 +43,9 @@ db::RouteStatus PostRoute::connectPins(bool final) {
                 db::routeStat.increment(db::RouteStage::POST, db::MiscRouteEvent::LINK_PIN_VIO, 1);
             }
         }
-        if (pinTapConnector.pinViaMoved) {
-            auto temp = tap;
-            if (tap->parent) {
-                tap = tap->parent;
-                for (auto it=tap->children.begin(); it!=tap->children.end(); it++) {
-                    if (*it == temp) {
-                        *it = tap->children.back();
-                        tap->children.pop_back();
-                        break;
-                    }
-                }
-            }
-            else {
-                tap = tap->children[0];
-                tap->parent = nullptr;
-                tap->viaType = nullptr;
-                for (auto it=dbNet.gridTopo.begin(); it!=dbNet.gridTopo.end(); it++) {
-                    if (*it == temp) {
-                        *it = tap;
-                        break;
-                    }
-                }
-            }
-            tap->pinIdx = temp->pinIdx;
-            tap->fakePin = true;
-        }
         if (pinTapConnector.bestLinkVia.first != -1) {
             linkViaToPins[tap] = pinTapConnector.bestLinkVia;
+            linkViaTypes[tap] = nullptr;
         }
     }
 
@@ -160,8 +132,10 @@ void PostRoute::getTopo() {
         const int layerIdx = node->layerIdx;
         if (node->pinIdx >= 0) {
             const unsigned pinIdx = static_cast<unsigned>(node->pinIdx);
-            std::get<1>(subTreeMetals[subTreeIdx]).insert(pinIdx);
-            pinSubTrees[pinIdx][layerIdx].insert(subTreeIdx);
+            if (node->fakePin == false) {
+                std::get<1>(subTreeMetals[subTreeIdx]).insert(pinIdx);
+                pinSubTrees[pinIdx][layerIdx].insert(subTreeIdx);
+            }
             const std::unordered_map<std::shared_ptr<db::GridSteiner>, vector<utils::SegmentT<DBU>>>::const_iterator
                 &linkIt = linkToPins.find(node);
             if (linkIt != linkToPins.end()) {
@@ -176,14 +150,16 @@ void PostRoute::getTopo() {
             if (linkViaIt != linkViaToPins.end()) {
                 const int viaLayerIdx = linkViaIt->second.first;
                 const utils::PointT<DBU> &viaLoc = linkViaIt->second.second;
-                const db::ViaType &bestViaType = database.getBestViaTypeForFixed(viaLoc, viaLayerIdx, dbNet.idx);
-                database.writeDEFVia(dbNet, viaLoc, bestViaType, viaLayerIdx);
-                const utils::BoxT<DBU> &box = viaLayerIdx == layerIdx ? bestViaType.getShiftedBotMetal(viaLoc)
-                                                                      : bestViaType.getShiftedTopMetal(viaLoc);
+                const db::ViaType *bestViaType = linkViaTypes[node];
+                if (bestViaType == nullptr)
+                    bestViaType = &(database.getBestViaTypeForFixed(viaLoc, viaLayerIdx, dbNet.idx));
+                database.writeDEFVia(dbNet, viaLoc, *bestViaType, viaLayerIdx);
+                const utils::BoxT<DBU> &box = viaLayerIdx == layerIdx ? bestViaType->getShiftedBotMetal(viaLoc)
+                                                                      : bestViaType->getShiftedTopMetal(viaLoc);
                 std::get<2>(subTreeMetals[subTreeIdx]).push_back(box);
                 const int pinLayerIdx = viaLayerIdx == layerIdx ? viaLayerIdx + 1 : viaLayerIdx;
-                const utils::BoxT<DBU> &pinBox = viaLayerIdx == layerIdx ? bestViaType.getShiftedTopMetal(viaLoc)
-                                                                         : bestViaType.getShiftedBotMetal(viaLoc);
+                const utils::BoxT<DBU> &pinBox = viaLayerIdx == layerIdx ? bestViaType->getShiftedTopMetal(viaLoc)
+                                                                         : bestViaType->getShiftedBotMetal(viaLoc);
                 if (pinSubTrees[pinIdx][pinLayerIdx].empty()) {
                     subTreeMetals.emplace_back(
                         pinLayerIdx, std::unordered_set<unsigned>({pinIdx}), vector<utils::BoxT<DBU>>(1, pinBox));
@@ -240,6 +216,10 @@ void PostRoute::getTopo() {
         for (const db::BoxOnLayer &ab : dbNet.pinAccessBoxes[pinIdx]) {
             for (const unsigned subTreeIdx : pinSubTrees[pinIdx][ab.layerIdx])
                 std::get<2>(subTreeMetals[subTreeIdx]).push_back(ab);
+        }
+        if (pinViaPatches[pinIdx].IsValid()) {
+            for (const unsigned subTreeIdx : pinSubTrees[pinIdx][0])
+                std::get<2>(subTreeMetals[subTreeIdx]).push_back(pinViaPatches[pinIdx]);
         }
     }
     // fill

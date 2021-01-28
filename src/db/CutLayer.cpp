@@ -10,6 +10,7 @@ ViaType::ViaType(Rsyn::PhysicalVia rsynVia) {
     cut = getBoxFromRsynGeometries(rsynVia.allCutGeometries());
     top = getBoxFromRsynGeometries(rsynVia.allTopGeometries());
     name = rsynVia.getName();
+    topDir = top.height() > top.width() ? 1 : 0;
 
     if (rsynVia.hasRowCol()) {
         const DBU xBotEnc = rsynVia.getEnclosure(Rsyn::BOTTOM_VIA_LEVEL, X);
