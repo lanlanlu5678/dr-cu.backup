@@ -11,7 +11,7 @@ public:
     utils::BoxT<DBU> top;  // box on top metal layer
     utils::BoxT<DBU> cut;  // box on cut layer
     std::string name;
-    int idx;
+    int idx, topDir;
 
     vector<utils::BoxT<DBU>> botForbidRegions;
     vector<utils::BoxT<DBU>> topForbidRegions;

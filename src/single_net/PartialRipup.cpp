@@ -291,15 +291,15 @@ void PartialRipup::merge(std::shared_ptr<db::GridSteiner> node, int thre) {
         for (auto c : node->children) {
             d = c->distance;
 
-            if (d1 > d) {
-                d2 = d1;
-                d1 = d;
-                danger = c.get();
-            }
-            else if (d2 > d) {
-                d2 = d;
-            }
-        }
+//             if (d1 > d) {
+//                 d2 = d1;
+//                 d1 = d;
+//                 danger = c.get();
+//             }
+//             else if (d2 > d) {
+//                 d2 = d;
+//             }
+//         }
 
         if (d1 + d2 < thre) {
             mergePNetsInSubtrees(node, thre);

@@ -34,11 +34,7 @@ db::RouteStatus PostRoute::connectPins(bool final) {
 
     // vector<vector<std::shared_ptr<db::GridSteiner>>> samePinTaps(dbNet.numOfPins());
     for (auto tap : pinTaps) {
-        // if (final && dbNet.idx > 79900) {
-        //     std::cout << *tap << " via null : " << int(tap->viaType == nullptr) << std::endl;
-        // }
         if (final && handlePinVia(*tap)) {
-            // if (dbNet.idx > 79900) printf(" succ handle\n");
             continue;
         }
         PinTapConnector pinTapConnector(*tap, dbNet, tap->pinIdx);
