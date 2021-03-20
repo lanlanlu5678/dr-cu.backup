@@ -824,7 +824,7 @@ void RouteGrid::markFixedMetalBatch(vector<std::pair<BoxOnLayer, int>>& fixedMet
     vector<vector<std::pair<boostBox, int>>> fixedMetalsRtreeItems;
     fixedMetalsRtreeItems.resize(layers.size());
 
-    if (setting.dbVerbose >= +db::VerboseLevelT::LOW) {
+    if (setting.dbVerbose >= +db::VerboseLevelT::MIDDLE) {
         log() << "mark fixed metal batch ..." << std::endl;
     }
     const int initMem = utils::mem_use::get_current();
@@ -865,7 +865,7 @@ void RouteGrid::markFixedMetalBatch(vector<std::pair<BoxOnLayer, int>>& fixedMet
     for (int i = 0; i < numThreads; i++) threads[i].join();
 
     const int curMem = utils::mem_use::get_current();
-    if (setting.dbVerbose >= +db::VerboseLevelT::LOW) {
+    if (setting.dbVerbose >= +db::VerboseLevelT::MIDDLE) {
         printflog("MEM(MB): init/cur=%d/%d, incr=%d\n", initMem, curMem, curMem - initMem);
         log() << std::endl;
     }

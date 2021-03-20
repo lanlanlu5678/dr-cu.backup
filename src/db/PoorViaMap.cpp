@@ -235,7 +235,7 @@ void PoorViaMapRegionBuilder::genViaData(utils::IntervalT<int> regionTrackRange)
 }
 
 void PoorViaMapBuilder::initPoorViaMapFast(const vector<std::pair<BoxOnLayer, int>>& fixObjects) {
-    if (setting.dbVerbose >= +db::VerboseLevelT::LOW) {
+    if (setting.dbVerbose >= +db::VerboseLevelT::MIDDLE) {
         log() << "Init poorViaMapFast ..." << std::endl;
     }
     const int initMem = utils::mem_use::get_current();
@@ -314,7 +314,7 @@ void PoorViaMapBuilder::initPoorViaMapFast(const vector<std::pair<BoxOnLayer, in
 
     printPoorViaMapInfo();
     const int curMem = utils::mem_use::get_current();
-    if (setting.dbVerbose >= +db::VerboseLevelT::LOW) {
+    if (setting.dbVerbose >= +db::VerboseLevelT::MIDDLE) {
         printflog("MEM(MB): init/cur=%d/%d, incr=%d\n", initMem, curMem, curMem - initMem);
         log() << std::endl;
     }
