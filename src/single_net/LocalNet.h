@@ -26,6 +26,18 @@ public:
 
     void print() const;  // db::NetBase::print() + RouteGuideGraph::print()
 
+    // PARTIAL RIPUP
+    int pnetIdx = -1;
+    vector<std::shared_ptr<db::GridSteiner>> pnetPins;
+    void traverse(std::shared_ptr<db::GridSteiner> node);
+    void initPNetPins();
+    void creatLocalRouteGuides();
+    void creatAdaptiveRouteGuides();
+    void addDiffLayerRouteGuides();
+    void getGridBoxes();
+    // // debug
+    // DBU ripupArea = 0;
+
 private:
     void getRouteGuideMapping();
 };

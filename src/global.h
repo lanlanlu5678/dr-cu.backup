@@ -40,6 +40,3 @@ using boostPoint = bg::model::point<DBU, 2, bg::cs::cartesian>;
 using boostBox = bg::model::box<boostPoint>;
 using RTree = bgi::rtree<std::pair<boostBox, int>, bgi::rstar<32>>;
 using RTrees = vector<bgi::rtree<std::pair<boostBox, int>, bgi::rstar<32>>>;
-
-// PARTIAL RIPUP
-using drcRTrees = vector<bgi::rtree<std::pair<boostPoint, int>, bgi::rstar<32>>>;

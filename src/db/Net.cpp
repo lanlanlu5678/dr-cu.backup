@@ -167,42 +167,6 @@ void Net::getPinAccessBoxes(Rsyn::PhysicalLibraryPin phLibPin,
     }
 }
 
-// db::GridPoint Net::movePinVia(std::shared_ptr<db::GridSteiner> tap) {
-//     std::shared_ptr<db::GridSteiner> nei1, nei2;
-//     if (tap->parent) {
-//         nei1 = tap->parent;
-//         nei2 = tap->parent->parent;
-//     }
-//     else {
-//         nei1 = tap->children[0];    // ASSERT : only 1 child
-//         nei2 = tap->children[0]->children[0];
-//     }
-//     if (nei1->layerIdx != nei2->layerIdx)
-//         return db::GridPoint(-1, -1, -1);
-
-//     if (tap->parent)
-//         nei1->children.clear(); // ASSERT : only 1 child
-//     else
-//         nei1->parent = nullptr;
-
-//     // if (nei1->trackIdx == nei2->trackIdx) {
-//     //     if (nei1->crossPointIdx > nei2->crossPointIdx)
-//     //         nei1->crossPointIdx -= 1;
-//     //     else
-//     //         nei1->crossPointIdx += 1;
-//     // }
-//     // else {
-//     //     if (nei1->trackIdx > nei2->trackIdx)
-//     //         nei1->trackIdx -= 1;
-//     //     else
-//     //         nei1->trackIdx += 1;
-//     // }
-
-//     nei1->pinIdx = tap->pinIdx;
-//     nei1->fakePin = true;
-//     return db::GridPoint(nei1->layerIdx, nei1->trackIdx, nei1->crossPointIdx);
-// }
-
 void NetList::init(RsynService& rsynService) {
     if (db::setting.dbVerbose >= +db::VerboseLevelT::MIDDLE) {
         log() << "Init NetList ..." << std::endl;

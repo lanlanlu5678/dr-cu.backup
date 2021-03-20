@@ -32,6 +32,21 @@ public:
     // TODO: better way to differetiate same-layer and diff-layer girdPinAccessBoxes
     void getGridPinAccessBoxes(const Net& net, vector<vector<db::GridBoxOnLayer>>& gridPinAccessBoxes) const;
 
+    // Extended Content
+    int getTrackEnd(int lidx) const { return layers[lidx].tracks.size() - 1; };
+    int getCrossPointEnd(int lidx) const { return layers[lidx].crossPoints.size() - 1; };
+    utils::BoxT<DBU> getWireBox(int layerIdx, utils::PointT<DBU> pu, utils::PointT<DBU> pv) const;
+    void getRoutedBox(GridBoxOnLayer &queryGrid,
+                        vector<utils::BoxT<DBU>> &neiMetals,
+                        int netIdx) const;
+    void getFixedBox(const BoxOnLayer &queryBox,
+                        vector<utils::BoxT<DBU>> &neiMetals,
+                        int netIdx) const;
+    bool hasVioRoutedMetalOnTrack(int netIdx, int trackIdx, DBU cl, DBU cu) const;
+    int getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const;
+    int countOvlp(const BoxOnLayer &box,
+                            const vector<utils::BoxT<DBU>> &regions,
+                            const vector<utils::BoxT<DBU>> &neiMetals) const;
 private:
     RsynService rsynService;
 

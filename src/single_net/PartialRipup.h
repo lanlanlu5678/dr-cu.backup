@@ -5,14 +5,17 @@
 
 class PartialRipup {
     public:
-    static void preProcessRouteGuides();
+    static void mergeRouteGuides(db::Net &net);
 
-    static void extractPseudoNets(vector<int> &nets);
+    static void extractPNets(vector<int> &vioNets);
+    static void markLocalRipup(db::Net &net);
+    static void markAdaptiveRipup(db::Net &net);
 
-    static void reOrderAndGuideMark(const vector<int> &nets);
+    static void merge(std::shared_ptr<db::GridSteiner> node, int thre);
+    static void removeDBEdges(std::shared_ptr<db::GridSteiner> node, int idx);
 
-    static void markOfGuides(const vector<int> &nets);
-    static void expandRouteGuides(const vector<int> &nets, bool oriMode);
-
-    static void reduceNets(vector<int> &netsToRoute);
+    static void removeSmallLayerSwitch(db::Net &net);
+    static void removeCorners(std::shared_ptr<db::GridSteiner> node, int idx);
+    static void shiftPinGrid(db::Net &net);
+    static void handlePinSplitVias(db::Net &net);
 };

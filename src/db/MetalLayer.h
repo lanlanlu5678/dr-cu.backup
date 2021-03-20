@@ -102,7 +102,6 @@ public:
     // width
     DBU width = 0;
     DBU minWidth = 0;
-    DBU halfWidth = 0;
     DBU widthForSuffOvlp = 0;
     DBU shrinkForSuffOvlp = 0;
     // minArea

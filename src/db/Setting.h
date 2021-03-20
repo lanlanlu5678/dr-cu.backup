@@ -78,6 +78,13 @@ public:
 
     void update(int iter);
     void print() const;
+
+    // PARTIAL RIPUP
+    bool localRipup = false;
+    bool adaptiveRipup = false;
+    bool guideRipup = false;
+    bool fullyRoute = true;
+    bool constrainInGuides = true;
 };
 
 extern RrrIterSetting rrrIterSetting;

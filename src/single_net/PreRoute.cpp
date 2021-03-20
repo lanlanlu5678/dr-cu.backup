@@ -55,31 +55,40 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
     return status;
 }
 
+// PARTIAL RIPUP
 db::RouteStatus PreRoute::runIterative() {
-    db::RouteStatus status = run(db::rrrIterSetting.defaultGuideExpand);
+    db::RouteStatus status = db::RouteStatus::SUCC_NORMAL;
+    if (db::rrrIterSetting.fullyRoute) {
+        status = run(db::rrrIterSetting.defaultGuideExpand);
 
-    int iter = 0;
-    int numPitchForGuideExpand = db::rrrIterSetting.defaultGuideExpand;
-    utils::timer singleNetTimer;
-    while (status == +db::RouteStatus::FAIL_DETACHED_GUIDE && iter < db::setting.guideExpandIterLimit) {
-        iter++;
-        numPitchForGuideExpand += iter;
+        int iter = 0;
+        int numPitchForGuideExpand = db::rrrIterSetting.defaultGuideExpand;
+        utils::timer singleNetTimer;
+        while (status == +db::RouteStatus::FAIL_DETACHED_GUIDE && iter < db::setting.guideExpandIterLimit) {
+            iter++;
+            numPitchForGuideExpand += iter;
 
-        status = run(numPitchForGuideExpand);
+            status = run(numPitchForGuideExpand);
+        }
+
+        const std::string name = localNet.getName();
+        if (iter >= 1) {
+            log() << "Warning: Net " << name << " expands " << iter << " iterations"
+                << ", which takes " << singleNetTimer.elapsed() << " s in total." << std::endl;
+        }
     }
-
-    const std::string name = localNet.getName();
-    if (iter >= 1) {
-        log() << "Warning: Net " << name << " expands " << iter << " iterations"
-              << ", which takes " << singleNetTimer.elapsed() << " s in total." << std::endl;
-    }
+    else if (db::rrrIterSetting.localRipup)
+        status = localRipup();
+    else if (db::rrrIterSetting.adaptiveRipup && localNet.pnetIdx >= 0)
+        status = adaptiveRipup();
+    // else 
 
     switch (status) {
         case +db::RouteStatus::FAIL_DETACHED_GUIDE:
-            log() << "Error: Exceed the guideExpandIterLimit, but Net " << name << " still FAIL_DETACHED_GUIDE\n";
+            log() << "Error: Exceed the guideExpandIterLimit, but Net " << localNet.idx << " still FAIL_DETACHED_GUIDE\n";
             break;
         case +db::RouteStatus::FAIL_DETACHED_PIN:
-            log() << "Error: Net " << name << " FAIL_DETACHED_PIN\n";
+            log() << "Error: Net " << localNet.idx << " FAIL_DETACHED_PIN\n";
             break;
         default:
             break;
@@ -240,4 +249,80 @@ bool PreRoute::checkGuideConnTrack() const {
     VisitPin(0);
 
     return all_of(pinVisited.begin(), pinVisited.end(), [](bool visited) { return visited; });
+}
+
+// PARTIAL RIPUP
+db::RouteStatus PreRoute::localRipup() {
+    localNet.initPNetPins();
+    if (localNet.pnetPins.size() == 1) {
+        // printf("net %d pnetIdx %d succ one pin\n", localNet.idx, localNet.pnetIdx);
+        return db::RouteStatus::SUCC_ONE_PIN;
+    }
+    // route guides
+    localNet.routeGuides.clear();
+    for (size_t i=0; i<localNet.pnetPins.size(); i++) {
+        if (localNet.pnetPins[i]->pinIdx < 0) continue;
+        utils::BoxT<DBU> box;
+        for (const auto &pbox : localNet.pinAccessBoxes[i]) {
+            box = box.UnionWith(pbox);
+        }
+        localNet.routeGuides.push_back({localNet.pinAccessBoxes[i][0].layerIdx, box});
+    }
+    localNet.creatLocalRouteGuides();
+    expandGuidesToMargin();
+    localNet.getGridBoxes();
+    localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
+    localNet.initNumOfVertices();
+    return db::RouteStatus::SUCC_NORMAL;
+}
+
+db::RouteStatus PreRoute::adaptiveRipup() {
+    localNet.initPNetPins();
+    if (localNet.pnetPins.size() == 1) {
+        // printf("net %d pnetIdx %d succ one pin\n", localNet.idx, localNet.pnetIdx);
+        return db::RouteStatus::SUCC_ONE_PIN;
+    }
+    localNet.creatAdaptiveRouteGuides();
+    expandGuidesToMargin();
+    localNet.getGridBoxes();
+    localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
+    localNet.initNumOfVertices();
+    return db::RouteStatus::SUCC_NORMAL;
+}
+
+db::RouteStatus PreRoute::fullyRipup() {
+    localNet.routeGuides.clear();
+    const auto &mguides = localNet.dbNet.mergedGuides;
+    size_t gsize = mguides.size();
+    int lnum = database.getLayerNum() - 1;
+    for (size_t i=0; i<gsize; i++) {
+        const auto &mg = mguides[i];
+        localNet.routeGuides.push_back(mg);
+        int vio = localNet.dbNet.mergedVios[i],
+            ml = mg.layerIdx;
+        if (vio >= db::setting.diffLayerGuideVioThres) {
+            if (ml > 2) localNet.routeGuides.emplace_back(ml-1, mg);
+            if (ml < lnum) localNet.routeGuides.emplace_back(ml+1, mg);
+            db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
+        }
+        if (vio >= db::setting.diffLayerGuideVioThres * 2) {
+            if (ml > 3) localNet.routeGuides.emplace_back(ml-2, mg);
+            if (ml < lnum-1) localNet.routeGuides.emplace_back(ml+2, mg);
+            db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
+        }
+    }
+    expandGuidesToMargin();
+    auto status = expandGuidesToCoverPins();
+    if (db::isSucc(status)) {
+        localNet.initGridBoxes();
+        localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
+        localNet.initNumOfVertices();
+
+        if (!localNet.checkPin()) {
+            status = db::RouteStatus::FAIL_PIN_OUT_OF_GRID;
+        } else if (!localNet.checkPinGuideConn()) {
+            status = db::RouteStatus::FAIL_DETACHED_PIN;
+        }
+    }
+    return status;
 }

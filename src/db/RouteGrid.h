@@ -74,16 +74,6 @@ public:
     void clear();
     void setUnitVioCost(double discount = 1.0);
 
-    // Check Pin Link
-    utils::BoxT<DBU> getWireBox(int layerIdx, utils::PointT<DBU> pu, utils::PointT<DBU> pv) const;
-    vector<utils::BoxT<DBU>> getRoutedBox(const GridPoint &tap, int netIdx, bool debug = false) const;
-    int getPinLinkVio(const BoxOnLayer &box, int netIdx, bool debug = false) const;
-    int countOvlp(const BoxOnLayer &box,
-                    const vector<utils::BoxT<DBU>> &regions,
-                    const vector<utils::BoxT<DBU>> &neiMetals) const;
-    void getRoutedViaBox(const std::multimap<int, int> &viamap, int lc, int uc, int netIdx,
-                            GridPoint &via, vector<utils::BoxT<DBU>> &neiMetals) const;
-
     // Get unit cost
     inline CostT getUnitViaCost() const { return unitViaCost; }
     inline CostT getUnitMinAreaVioCost() const { return unitMinAreaVioCost; }

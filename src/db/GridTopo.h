@@ -36,6 +36,10 @@ public:
 
     friend ostream& operator<<(ostream& os, const GridSteiner& node);
     void printTree(ostream& os = std::cout, int depth = 0);
+
+    // PARTIAL RIPUP
+    bool isVio = false;
+    int distance = 64;
 };
 
 }  // namespace db

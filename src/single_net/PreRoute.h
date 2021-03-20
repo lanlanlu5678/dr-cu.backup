@@ -16,4 +16,9 @@ private:
     db::RouteStatus expandGuidesToCoverPins();
 
     bool checkGuideConnTrack() const;
+
+    // PARTIAL RIPUP
+    db::RouteStatus localRipup();
+    db::RouteStatus adaptiveRipup();
+    db::RouteStatus fullyRipup();
 };

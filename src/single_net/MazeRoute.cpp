@@ -18,6 +18,7 @@ db::RouteStatus MazeRoute::run() {
 
     auto status = route(startPin);
     if (!db::isSucc(status)) {
+        db::routeStat.increment(db::RouteStage::MAZE, status);
         return status;
     }
 
@@ -137,6 +138,53 @@ db::RouteStatus MazeRoute::route(int startPin) {
         }
 
         if (!dstVertex) {
+            // PARTIAL RIPUP
+            printf("\n");
+            std::cout << " " << localNet.getName() << ";  pnet : " << localNet.pnetIdx << std::endl;
+            printf(" num of pins : %d\n", localNet.numOfPins());
+            if (localNet.numOfPins() - 1 == nPinToConnect) {
+                printf(" have not reach any end pins.\n");
+                const auto &pp = database.getLoc(*(localNet.pnetPins[0]));
+                printf(" grid pos : %ld, %ld\n", pp.x, pp.y);
+                if (localNet.pinGuideConn[0].empty())
+                    printf(" pin 0 detached guide\n");
+                else {
+                    for (const auto &pair : localNet.pinGuideConn[0])
+                        log() << "      " << pair.first << "," << pair.second << std::endl;
+                    const auto &vs = graph.getVertices(0);
+                    printf("    ");
+                    for (int v : vs) printf(" %d,", v);
+                    printf("\n");
+                }
+                for (const auto &box : localNet.pinAccessBoxes[0])
+                    log() << box << std::endl;
+            }
+            for (size_t p=0; p<localNet.numOfPins(); p++) {
+                if (!visitedPin.count(int(p))) {
+                    printf(" pin %d unvisit :\n", int(p));
+                    const auto &pp = database.getLoc(*(localNet.pnetPins[p]));
+                    printf(" grid pos : %ld, %ld\n", pp.x, pp.y);
+                    if (localNet.pinGuideConn[p].empty())
+                        printf(" pin %d detached guide\n", int(p));
+                    else {
+                        for (const auto &pair : localNet.pinGuideConn[p])
+                            log() << "      " << pair.first << "," << pair.second << std::endl;
+                        const auto &vs = graph.getVertices(int(p));
+                        printf("    ");
+                        for (int v : vs) printf(" %d,", v);
+                        printf("\n");
+                    }
+                    for (const auto &box : localNet.pinAccessBoxes[p])
+                        log() << box << std::endl;
+                }
+            }
+            // printf(" route guides\n");
+            // for (size_t i=0; i<localNet.routeGuides.size(); i++)
+            //     log() << " " << i << " " << localNet.routeGuides[i] << std::endl;
+            // printf(" merged guides\n");
+            // for (const auto &g : localNet.dbNet.mergedGuides)
+            //     log() << g << std::endl;
+            printf("\n");
             printWarnMsg(db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH, localNet.dbNet);
             return db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH;
         }

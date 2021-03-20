@@ -22,8 +22,6 @@ MetalLayer::MetalLayer(Rsyn::PhysicalLayer rsynLayer,
     idx = rsynLayer.getRelativeIndex();
     width = static_cast<DBU>(std::round(layer->width() * libDBU));
     minWidth = static_cast<DBU>(std::round(layer->minwidth() * libDBU));
-    halfWidth = width * 0.5;
-    if (minWidth <= 0) minWidth = width;
     widthForSuffOvlp = std::ceil(minWidth * 0.7071);
     shrinkForSuffOvlp = std::max<DBU>(0, std::ceil(widthForSuffOvlp - width * 0.5));
     minArea = static_cast<DBU>(std::round(layer->area() * libDBU * libDBU));

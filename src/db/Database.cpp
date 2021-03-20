@@ -554,6 +554,7 @@ void Database::sliceRouteGuides() {
             utils::SlicePolygons<DBU>(guides[layerIdx], 1 - getLayerDir(layerIdx));
             for (const auto& guide : guides[layerIdx]) {
                 net.routeGuides.emplace_back(layerIdx, guide);
+                // PARTIAL RIPUP
                 net.gridRouteGuides.push_back(rangeSearch(net.routeGuides.back()));
             }
         }
@@ -628,24 +629,24 @@ void Database::getGridPinAccessBoxes(const Net& net, vector<vector<db::GridBoxOn
                 pins[pinAccessBox.layerIdx].push_back(gridPinForbidRegion);
             }
             // One-pitch extension
-            // auto pinExtension = pinAccessBox;
-            // for (int d = 0; d < 2; ++d) {
-            //     pinExtension[d].low -= pitch;
-            //     pinExtension[d].high += pitch;
-            // }
-            // const db::GridBoxOnLayer& gridPinExtension = rangeSearch(pinExtension);
-            // for (int trackIdx = gridPinExtension.trackRange.low; trackIdx <= gridPinExtension.trackRange.high;
-            //      ++trackIdx) {
-            //     for (int cpIdx = gridPinExtension.crossPointRange.low; cpIdx <= gridPinExtension.crossPointRange.high;
-            //          ++cpIdx) {
-            //         db::GridPoint pt(pinAccessBox.layerIdx, trackIdx, cpIdx);
-            //         if (!gridPinForbidRegion.includePoint(pt) && Dist(pinAccessBox, getLoc(pt)) <= pitch) {
-            //             pins[pinAccessBox.layerIdx].emplace_back(pinAccessBox.layerIdx,
-            //                                                      utils::IntervalT<int>{trackIdx, trackIdx},
-            //                                                      utils::IntervalT<int>{cpIdx, cpIdx});
-            //         }
-            //     }
-            // }
+            auto pinExtension = pinAccessBox;
+            for (int d = 0; d < 2; ++d) {
+                pinExtension[d].low -= pitch;
+                pinExtension[d].high += pitch;
+            }
+            const db::GridBoxOnLayer& gridPinExtension = rangeSearch(pinExtension);
+            for (int trackIdx = gridPinExtension.trackRange.low; trackIdx <= gridPinExtension.trackRange.high;
+                 ++trackIdx) {
+                for (int cpIdx = gridPinExtension.crossPointRange.low; cpIdx <= gridPinExtension.crossPointRange.high;
+                     ++cpIdx) {
+                    db::GridPoint pt(pinAccessBox.layerIdx, trackIdx, cpIdx);
+                    if (!gridPinForbidRegion.includePoint(pt) && Dist(pinAccessBox, getLoc(pt)) <= pitch) {
+                        pins[pinAccessBox.layerIdx].emplace_back(pinAccessBox.layerIdx,
+                                                                 utils::IntervalT<int>{trackIdx, trackIdx},
+                                                                 utils::IntervalT<int>{cpIdx, cpIdx});
+                    }
+                }
+            }
         }
 
         // assign a relatively far grid access box if none (rarely happen)

@@ -62,7 +62,7 @@ void GridGraphBuilderBase::addOutofPinPenalty() {
         for (auto vertex : graph.pinToVertex[p]) {
             graph.vertexCost[vertex] += getPinPointCost(localNet.dbNet.pinAccessBoxes[p], vertexToGridPoint[vertex]);
             PinTapConnector pinTapConnector(vertexToGridPoint[vertex], localNet.dbNet, p);
-            pinTapConnector.run(nullptr);
+            pinTapConnector.run();
             if (pinTapConnector.bestVio > 0) {
                 graph.vertexCost[vertex] += database.getUnitSpaceVioCost();
             }
