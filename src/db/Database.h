@@ -42,11 +42,13 @@ public:
     void getFixedBox(const BoxOnLayer &queryBox,
                         vector<utils::BoxT<DBU>> &neiMetals,
                         int netIdx) const;
-    bool hasVioRoutedMetalOnTrack(int netIdx, int trackIdx, DBU cl, DBU cu) const;
+    bool hasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const;
+    void debugHasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const;
     int getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const;
     int countOvlp(const BoxOnLayer &box,
                             const vector<utils::BoxT<DBU>> &regions,
                             const vector<utils::BoxT<DBU>> &neiMetals) const;
+    utils::IntervalT<DBU> getEmptyRange(int layerIdx, int trackIdx, int cpIdx, int netIdx) const;
 private:
     RsynService rsynService;
 

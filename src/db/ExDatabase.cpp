@@ -215,14 +215,14 @@ void Database::getFixedBox(const BoxOnLayer &queryBox,
     }
 }
 
-bool Database::hasVioRoutedMetalOnTrack(int netIdx, int trackIdx, DBU cl, DBU cu) const {
-    const auto &cp = layers[1].crossPoints;
+bool Database::hasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const {
+    const auto &cp = layers[layerIdx].crossPoints;
     int lc = getSurroundingCrossPoint(1, cl).low - 1,
         uc = getSurroundingCrossPoint(1, cu).high + 1,
-        dir = 1 - layers[1].direction;
-    DBU rcl = 0, rcu = 0, botViaSpace = layers[1].maxEolSpace + cutLayers[0].defaultViaType().top[dir].high,
-        topViaSpace = layers[1].maxEolSpace + cutLayers[1].defaultViaType().bot[dir].high,
-        wireSpace = layers[1].maxEolSpace + layers[1].width * 0.5;
+        dir = 1 - layers[layerIdx].direction;
+    DBU rcl = 0, rcu = 0, upViaSpace = layers[layerIdx].maxEolSpace + cutLayers[layerIdx].defaultViaType().bot[dir].high,
+        loViaSpace = layerIdx > 0 ? layers[layerIdx].maxEolSpace + cutLayers[layerIdx-1].defaultViaType().top[dir].high : -1,
+        wireSpace = layers[layerIdx].maxEolSpace + layers[layerIdx].width * 0.5;
 
     // wire
     auto queryItvl = boost::icl::interval<int>::closed(lc, uc);
@@ -239,21 +239,21 @@ bool Database::hasVioRoutedMetalOnTrack(int netIdx, int trackIdx, DBU cl, DBU cu
     }
 
     // via
-    auto lb = routedViaMap[1][trackIdx].lower_bound(lc);
-    auto ub = routedViaMap[1][trackIdx].upper_bound(uc);
+    auto lb = routedViaMap[layerIdx][trackIdx].lower_bound(lc);
+    auto ub = routedViaMap[layerIdx][trackIdx].upper_bound(uc);
     for (auto it=lb; it!=ub; it++) {
         if (it->second != netIdx) {
             rcl = cp[it->first].location;
-            if (abs(cl-rcl) < botViaSpace || abs(rcl-cu) < botViaSpace)
+            if (abs(cl-rcl) < upViaSpace || abs(rcl-cu) < upViaSpace)
                 return true;
         }
     }
-    lb = routedViaMapUpper[1][trackIdx].lower_bound(lc);
-    ub = routedViaMapUpper[1][trackIdx].upper_bound(uc);
+    lb = routedViaMapUpper[layerIdx][trackIdx].lower_bound(lc);
+    ub = routedViaMapUpper[layerIdx][trackIdx].upper_bound(uc);
     for (auto it=lb; it!=ub; it++) {
         if (it->second != netIdx) {
             rcu = cp[it->first].location;
-            if (abs(cl-rcu) < topViaSpace || abs(rcu-cu) < topViaSpace)
+            if (abs(cl-rcu) < loViaSpace || abs(rcu-cu) < loViaSpace)
                 return true;
         }
     }
@@ -261,56 +261,94 @@ bool Database::hasVioRoutedMetalOnTrack(int netIdx, int trackIdx, DBU cl, DBU cu
     return false;
 }
 
-// void Database::debugHasVioRoutedMetalOnTrack(int netIdx, int trackIdx, DBU cl, DBU cu) const {
-//     const auto &cp = layers[1].crossPoints;
-//     int lc = getSurroundingCrossPoint(1, cl).low - 1,
-//         uc = getSurroundingCrossPoint(1, cu).high + 1,
-//         dir = 1 - layers[1].direction;
-//     DBU rcl = 0, rcu = 0, botViaSpace = layers[1].maxEolSpace + cutLayers[0].defaultViaType().top[dir].high,
-//         topViaSpace = layers[1].maxEolSpace + cutLayers[1].defaultViaType().bot[dir].high,
-//         wireSpace = layers[1].maxEolSpace + layers[1].width * 0.5;
-//     printf("    debug vio routed : eol : %ld\n", layers[1].maxEolSpace);
-//     printf("    debug vio routed : bot : %ld\n", cutLayers[0].defaultViaType().top[dir].high);
-//     printf("    debug vio routed : top : %ld\n", cutLayers[1].defaultViaType().bot[dir].high);
+void Database::debugHasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const {
+    const auto &cp = layers[layerIdx].crossPoints;
+    int lc = getSurroundingCrossPoint(1, cl).low - 1,
+        uc = getSurroundingCrossPoint(1, cu).high + 1,
+        dir = 1 - layers[layerIdx].direction;
+    DBU botViaSpace = layers[layerIdx].maxEolSpace + cutLayers[0].defaultViaType().top[dir].high,
+        topViaSpace = layers[layerIdx].maxEolSpace + cutLayers[layerIdx].defaultViaType().bot[dir].high,
+        wireSpace = layers[layerIdx].maxEolSpace + layers[layerIdx].width * 0.5;
+    printf("\n cl : %ld,     cu : %ld,   bvs : %ld,     tvs : %ld,      ws : %ld\n", cl, cu, botViaSpace, topViaSpace, wireSpace);
 
-//     // wire
-//     auto queryItvl = boost::icl::interval<int>::closed(lc, uc);
-//     auto itvls = routedWireMap[1][trackIdx].equal_range(queryItvl);
-//     for (auto it=itvls.first; it!=itvls.second; it++) {
-//         for (int id : it->second) {
-//             if (id != netIdx) {
-//                 rcl = cp[first(it->first)].location;
-//                 rcu = cp[last(it->first)].location;
-//                 if ((cl-rcu) < wireSpace && (rcl-cu) < wireSpace) {
-//                     printf("    debug vio routed : wire (%ld, %ld);   thre : %ld\n", rcl, rcu, wireSpace);
-//                 }
-//             }
-//         }
-//     }
+    // wire
+    printf("    wires:\n");
+    auto queryItvl = boost::icl::interval<int>::closed(lc, uc);
+    auto itvls = routedWireMap[1][trackIdx].equal_range(queryItvl);
+    for (auto it=itvls.first; it!=itvls.second; it++) {
+        for (int id : it->second) {
+            if (id != netIdx) {
+                std::cout << printf(" l: %ld, u: %ld\n", cp[first(it->first)].location, cp[last(it->first)].location);
+            }
+        }
+    }
 
-//     // via
-//     auto lb = routedViaMap[1][trackIdx].lower_bound(lc);
-//     auto ub = routedViaMap[1][trackIdx].upper_bound(uc);
-//     for (auto it=lb; it!=ub; it++) {
-//         if (it->second != netIdx) {
-//             rcl = cp[it->first].location;
-//             if ((cl-rcl) < botViaSpace || (rcl-cu) < botViaSpace) {
-//                 printf("    debug vio routed : via (%ld, %ld);   bot : %ld\n", rcl, rcu, botViaSpace);
-//             }
-//         }
-//     }
-//     lb = routedViaMapUpper[1][trackIdx].lower_bound(lc);
-//     ub = routedViaMapUpper[1][trackIdx].upper_bound(uc);
-//     for (auto it=lb; it!=ub; it++) {
-//         if (it->second != netIdx) {
-//             rcu = cp[it->first].location;
-//             if ((cl-rcu) < topViaSpace || (rcu-cu) < topViaSpace) {
-//                 printf("    debug vio routed : via (%ld, %ld);   top : %ld\n", rcl, rcu, topViaSpace);
-//             }
-//         }
-//     }
-// }
+    // via
+    printf("    same layer vias:\n");
+    auto lb = routedViaMap[layerIdx][trackIdx].lower_bound(lc);
+    auto ub = routedViaMap[layerIdx][trackIdx].upper_bound(uc);
+    for (auto it=lb; it!=ub; it++) {
+        if (it->second != netIdx) {
+            std::cout << printf(" v: %ld\n", cp[it->first].location);
+        }
+    }
+    printf("    lower layer vias:\n");
+    lb = routedViaMapUpper[layerIdx][trackIdx].lower_bound(lc);
+    ub = routedViaMapUpper[layerIdx][trackIdx].upper_bound(uc);
+    for (auto it=lb; it!=ub; it++) {
+        if (it->second != netIdx) {
+            std::cout << printf(" v: %ld\n", cp[it->first].location);
+        }
+    }
+    printf("\n");
+}
 
+utils::IntervalT<DBU> Database::getEmptyRange(int layerIdx, int trackIdx, int cpIdx, int netIdx) const {
+    const auto &layer = layers[layerIdx];
+    utils::IntervalT<DBU> availItl(layer.crossPoints[cpIdx-2].location, layer.crossPoints[cpIdx+2].location);
+    DBU space = 0;
+    int dir = 1 - layer.direction;
+    // // routed wires
+    // auto queryItvl = boost::icl::interval<int>::closed(cpIdx-2, cpIdx+2);
+    // auto itvls = routedWireMap[layerIdx][trackIdx].equal_range(queryItvl);
+
+    // routed vias
+    GridPoint via(layerIdx, trackIdx, -1);
+    auto lb = routedViaMap[layerIdx][trackIdx].lower_bound(cpIdx-2);
+    auto ub = routedViaMap[layerIdx][trackIdx].upper_bound(cpIdx+2);
+    for (auto it=lb; it!=ub; it++) {
+        if (it->second != netIdx) {
+            via.crossPointIdx = it->first;
+            const auto &vialoc = getLoc(via);
+            auto type = getViaType(via);
+            const auto &viabox = type->getShiftedBotMetal(vialoc);
+            if (viabox[1-dir].range() <= layer.maxEolWidth)
+                space = layer.maxEolSpace;
+            else
+                space = layer.getParaRunSpace(0);
+            if (it->first < cpIdx) availItl.low = max<DBU>(availItl.low, viabox[dir].high+space);
+            else availItl.high = min<DBU>(availItl.high, viabox[dir].low-space);
+        }
+    }
+    lb = routedViaMapUpper[layerIdx][trackIdx].lower_bound(cpIdx-2);
+    ub = routedViaMapUpper[layerIdx][trackIdx].upper_bound(cpIdx+2);
+    for (auto it=lb; it!=ub; it++) {
+        if (it->second != netIdx) {
+            via.crossPointIdx = it->first;
+            const auto &vialoc = getLoc(via);
+            auto type = getViaType(getLower(via));
+            const auto &viabox = type->getShiftedTopMetal(vialoc);
+            if (viabox[1-dir].range() <= layer.maxEolWidth)
+                space = layer.maxEolSpace;
+            else
+                space = layer.getParaRunSpace(0);
+            if (it->first < cpIdx) availItl.low = max<DBU>(availItl.low, viabox[dir].high+space);
+            else availItl.high = min<DBU>(availItl.high, viabox[dir].low-space);
+        }
+    }
+
+    return availItl;
+}
 
 }   // namespace db
 

@@ -18,4 +18,5 @@ class PartialRipup {
     static void removeCorners(std::shared_ptr<db::GridSteiner> node, int idx);
     static void shiftPinGrid(db::Net &net);
     static void handlePinSplitVias(db::Net &net);
+    static void fixMAR(db::Net &net);
 };

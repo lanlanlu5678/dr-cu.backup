@@ -138,7 +138,7 @@ bool PostRoute::safeShift(const db::GridSteiner &tap) {
     //     std::cout << newtop << std::endl;
     //     database.debugHasVioRoutedMetalOnTrack(dbNet.idx, ug.trackIdx, newtop[dir].low, newtop[dir].high);
     // }
-    if (database.hasVioRoutedMetalOnTrack(dbNet.idx, ug.trackIdx, newtop[dir].low, newtop[dir].high))
+    if (database.hasVioRoutedMetalOnTrack(dbNet.idx, 1, ug.trackIdx, newtop[dir].low, newtop[dir].high))
         return false;
 
     // update topo
@@ -300,7 +300,7 @@ bool PostRoute::shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type,
     const auto &ug = database.getUpper(tap);
     const auto &newtop = type->getShiftedTopMetal(newloc);
     if (database.getPinLinkVio({0, viabot}, dbNet.idx, false) > 0 ||
-        database.hasVioRoutedMetalOnTrack(dbNet.idx, ug.trackIdx, newtop[dir].low, newtop[dir].high))
+        database.hasVioRoutedMetalOnTrack(dbNet.idx, 1, ug.trackIdx, newtop[dir].low, newtop[dir].high))
         return false;
 
     // update topo

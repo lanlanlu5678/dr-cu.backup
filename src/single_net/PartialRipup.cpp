@@ -722,3 +722,126 @@ void PartialRipup::removeCorners(std::shared_ptr<db::GridSteiner> node, int idx)
 
     for (auto c : node->children) removeCorners(c, idx);
 }
+
+void PartialRipup::fixMAR(db::Net &net) {
+
+    vector<db::GridSteiner *> otherPaths, bfsCurr, bfsNext;
+    vector<std::pair<db::GridSteiner *, db::GridSteiner *>> unSafePaths;
+
+    for (auto root : net.gridTopo)
+        otherPaths.push_back(root.get());
+    
+    while (!otherPaths.empty()) {
+        db::GridSteiner *begin = otherPaths.back(), *end = nullptr;
+        otherPaths.pop_back();
+        bool unsafe = begin->extWireSeg == nullptr && begin->parent != nullptr;
+        int layerIdx = begin->layerIdx;
+
+        // bfs for a path on 1 layer
+        bfsCurr.push_back(begin);
+        while (!bfsCurr.empty()) {
+            for (auto n : bfsCurr) {
+                if (n->children.empty()) {
+                    unsafe = false; // assume all leaves are pin conns
+                    continue;
+                }
+                for (auto c : n->children) {
+                    if (c->layerIdx == layerIdx)
+                        bfsNext.push_back(c.get());
+                    else {
+                        otherPaths.push_back(c.get());
+                        if (end == nullptr) {
+                            end = c.get();
+                            unsafe = unsafe && n->extWireSeg == nullptr;
+                        }
+                        else
+                            unsafe = false;
+                    }
+                }
+            }
+            bfsCurr = move(bfsNext);
+        }
+        if (unsafe)
+            unSafePaths.emplace_back(begin, end);
+    }
+
+    // for (const auto &pair : unSafePaths)
+    //     if (pair.first->parent == nullptr || pair.second->parent == nullptr)
+    //         printf(" ERROR : unSafe paths has nullptr\n");
+    // printf("net %d extracted\n", net.idx);
+    printf(" num of unsafe paths : %d\n", int(unSafePaths.size()));
+
+    for (const auto &pair : unSafePaths) {
+        const auto &u = *pair.first;
+        const auto &v = *pair.second;   // node on adj layer
+        const auto &p = *(v.parent);
+        const auto &uloc = database.getLoc(u);
+        const auto &vloc = database.getLoc(v);
+        const auto &layer = database.getLayer(u.layerIdx);
+        int lid = u.layerIdx, dir = 1 - layer.direction, tempCP = -1,
+            numGrids = abs(u.trackIdx-p.trackIdx) + abs(u.crossPointIdx-p.crossPointIdx);   // wirelength estimation by hpwl
+        DBU mina = layer.minArea, width = layer.width, patchArea = 0, patchLen = 0;
+
+        // get patch area, available patch intervals
+        utils::BoxT<DBU> patchBox;
+        vector<utils::BoxT<DBU>> viaBoxes;
+        vector<utils::IntervalT<DBU>> availItvls;
+        if (u.parent->layerIdx > lid)
+            viaBoxes.emplace_back(u.viaType->getShiftedBotMetal(uloc));
+        else
+            viaBoxes.emplace_back(u.viaType->getShiftedTopMetal(uloc));
+        if (v.layerIdx > lid)
+            viaBoxes.emplace_back(v.viaType->getShiftedBotMetal(vloc));
+        else
+            viaBoxes.emplace_back(v.viaType->getShiftedTopMetal(vloc));
+        availItvls.emplace_back(database.getEmptyRange(lid, u.trackIdx, u.crossPointIdx, net.idx));
+        availItvls.emplace_back(database.getEmptyRange(lid, p.trackIdx, p.crossPointIdx, net.idx));
+        if (numGrids == 0) {
+            const auto &its = viaBoxes[0].IntersectWith(viaBoxes[1]);
+            patchArea = mina - viaBoxes[0].area() - viaBoxes[1].area() + its.area();
+        }
+        if (numGrids > 0) {
+            patchArea = mina - viaBoxes[0].area() - viaBoxes[1].area() - numGrids * layer.pitch * width;
+            tempCP = u.children[0]->crossPointIdx;
+            if (tempCP == u.crossPointIdx) patchArea += viaBoxes[0][1-dir].range() * width / 2;
+            else {
+                patchArea += viaBoxes[0][dir].range() * width / 2;
+                if (tempCP < u.crossPointIdx) availItvls[0].low = uloc[dir];
+                else availItvls[0].high = uloc[dir];
+            }
+            tempCP = p.parent->crossPointIdx;
+            if (tempCP == p.crossPointIdx) patchArea += viaBoxes[1][1-dir].range() * width / 2;
+            else {
+                patchArea += viaBoxes[1][dir].range() * width / 2;
+                if (tempCP < p.crossPointIdx) availItvls[1].low = vloc[dir];
+                else availItvls[1].high = vloc[dir];
+            }
+        }
+
+            // printf(" u : %d,%d,%d;  v : %d,%d,%d\n", u.layerIdx, u.trackIdx, u.crossPointIdx,
+            //                                             p.layerIdx, p.trackIdx, p.crossPointIdx);
+            // printf(" u : %ld,%ld;  v : %ld,%ld\n", uloc.x, uloc.y, vloc.x, vloc.y);
+            // printf("%ld, %ld, %d\n", mina, patchArea, numGrids);
+
+        // patch
+        if (patchArea > 0) {
+            for (size_t i=0; i<2; i++) {
+                if (viaBoxes[i][dir].range() < viaBoxes[i][1-dir].range()) continue;
+                patchLen = patchArea / viaBoxes[i][1-dir].range();
+
+                    // printf(" %ld, %ld\n", patchLen, availItvls[i].range());
+                    // std::cout << viaBoxes[i] << " ; " << availItvls[i] << std::endl;
+
+                if (patchLen + viaBoxes[i][dir].range() > availItvls[i].range()) continue;
+                if (viaBoxes[i][dir].low - availItvls[i].low >= patchLen)
+                    viaBoxes[i][dir].low -= patchLen;
+                else {
+                    viaBoxes[i][dir].low = availItvls[i].low;
+                    viaBoxes[i][dir].high += (patchLen - viaBoxes[i][dir].low + availItvls[i].low);
+                }
+                database.writeDEFFillRect(net, viaBoxes[i], lid);
+                break;
+            }
+        }
+    }
+}

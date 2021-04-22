@@ -221,40 +221,12 @@ void Router::route(const vector<int>& netsToRoute) {
                   << commitMT << ", peakM=" << utils::mem_use::get_peak() << ", maxV=" << maxNumVertices << std::endl;
         }
         iBatch++;
-        // PARTIAL RIPUP
-        // if (iter == 2) {
-        //     log() << " curr mem : " << utils::mem_use::get_current() << std::endl;
-        //     int sumv = 0;
-        //     for (int id : batch) {
-        //         sumv += routers[id].localNet.estimatedNumOfVertices;
-        //     }
-        //     printf("      sumv : %d,  averv : %d\n", sumv, int(sumv/int(batch.size())));
-        // }
     }
     if (iter > 0) {
         runJobsMT(netsToRoute.size(), [&](int id) {
             auto &net = database.nets[id];
             PostMazeRoute(net).run();
-            // for (auto root : net.gridTopo)
-            //     PartialRipup::removeCorners(root);
         });
-        // for (int id : netsToRoute) {
-        //     PartialRipup::removeSmallLayerSwitch(database.nets[id]);
-        //     // PartialRipup::handlePinSplitVias(database.nets[id]);
-        //     // if (database.nets[id].getName() == "net102558") {
-        //     //     printf("net 102558:\n");
-        //     //     database.nets[id].postOrderVisitGridTopo([](std::shared_ptr<db::GridSteiner> node) {
-        //     //         if (node->pinIdx > 0) printf(" %d,  %d,%d,%d\n", node->pinIdx, node->layerIdx,
-        //     //                                             node->trackIdx, node->crossPointIdx);
-        //     //     });
-        //     // }
-        // }
-        // printf(" remove cuts\n");
-        // for (int id : netsToRoute) {
-        //     PartialRipup::shiftPinGrid(database.nets[id]);
-        // }
-        // // PartialRipup::shiftPinGrid(database.nets[60453]);
-        // printf(" shift pins\n");
         for (int id : netsToRoute) {
             for (auto root : database.nets[id].gridTopo) PartialRipup::removeCorners(root, id);
         }
@@ -301,7 +273,9 @@ void Router::finish() {
         PartialRipup::removeSmallLayerSwitch(database.nets[netIdx]);
         PartialRipup::handlePinSplitVias(database.nets[netIdx]);
         // PartialRipup::shiftPinGrid(database.nets[netIdx]);
+        PartialRipup::fixMAR(database.nets[netIdx]);
     });
+
     // 2. get via types again
     for (int iter = 0; iter < db::setting.multiNetSelectViaTypesIter; iter++) {
         MTStat allGetViaTypesMT, allCommitViaTypesMT;
