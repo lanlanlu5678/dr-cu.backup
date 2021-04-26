@@ -117,7 +117,7 @@ void runISPD18Flow(const boost::program_options::variables_map& vm) {
     router.run();
     database.writeNetTopo(db::setting.outputFile + ".topo");
     database.clear();
-    // database.writeDEF(db::setting.outputFile);
+    database.writeDEF(db::setting.outputFile);
     log() << "Finish writing def" << std::endl;
     log() << "MEM: cur=" << utils::mem_use::get_current() << "MB, peak=" << utils::mem_use::get_peak() << "MB"
           << std::endl;

@@ -27,11 +27,14 @@ ostream& operator<<(ostream& os, const MTStat mtStat) {
     return os;
 }
 
-void printndoes(std::shared_ptr<db::GridSteiner> node) {
-    const auto &np = database.getLoc(*node);
-    // std::cout << "  " << node->layerIdx << ", " << np << std::endl;
-    std::cout << *node << " via : " << int(node->viaType != nullptr) << std::endl;
+inline void printndoes(std::shared_ptr<db::GridSteiner> node) {
+    // const auto &np = database.getLoc(*node);
+    // std::cout << node->layerIdx << ", " << np << " via : " << int(node->viaType != nullptr) << " pinIdx : " << node->pinIdx << std::endl;
+    std::cout << *node << "; ";
+    if (node->parent) std::cout << *(node->parent);
+    std::cout << std::endl;
     for (auto c : node->children) {
+        // if (c->isVio)
             printndoes(c);
     }
 }
@@ -175,12 +178,6 @@ void Router::route(const vector<int>& netsToRoute) {
               << ". There will be " << batches.size() << " batches." << std::endl;
         log() << std::endl;
     }
-    // PARTIAL RIPUP
-    // for (int id : netsToRoute) {
-    // }
-    // size_t rsize = routers.size();
-    // for (size_t i=0; i<rsize; i++) {
-    // }
 
     // maze route and commit DB by batch
     int iBatch = 0;
@@ -230,7 +227,6 @@ void Router::route(const vector<int>& netsToRoute) {
         for (int id : netsToRoute) {
             for (auto root : database.nets[id].gridTopo) PartialRipup::removeCorners(root, id);
         }
-        printf(" remove corners\n");
     }
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         printlog("allMazeMT", allMazeMT);

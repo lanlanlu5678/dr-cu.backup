@@ -177,14 +177,14 @@ int LocalNet::getCrossPointPenalty(int guideIdx, int trackIdx, int cpIdx) const 
 
 // PARITAL RIPUP
 void LocalNet::traverse(std::shared_ptr<db::GridSteiner> node) {
-    bool isPin = false;
+    bool isPin = node->pinIdx >= 0;
     for (auto c : node->children) {
         if (c->isVio)
             traverse(c);
         else
             isPin = true;
     }
-    if ((node->children.empty() || isPin) && node != pnetPins[0])
+    if (isPin && node != pnetPins[0])
         pnetPins.push_back(node);
 }
 
@@ -193,14 +193,21 @@ void LocalNet::initPNetPins() {
     pnetPins.push_back(dbNet.pnets[pnetIdx]);
     traverse(pnetPins[0]);
 
-    if (pnetPins.size() == 1) {
+    // do not reroute small pnets
+    int dist = 0;
+    for (size_t i=1; i<pnetPins.size(); i++) {
+        dist += abs(pnetPins[0]->trackIdx - pnetPins[i]->trackIdx) +
+                abs(pnetPins[0]->crossPointIdx - pnetPins[i]->crossPointIdx);
+    }
+    if (pnetPins.size() == 1 || dist < 10) {
         pnetPins[0]->isVio = false;
         return;
     }
+
     pinAccessBoxes.clear();
     pinAccessBoxes.resize(pnetPins.size());
     for (size_t i=0; i<pnetPins.size(); i++) {
-        if (pnetPins[i]->pinIdx < 0) {
+        if (pnetPins[i]->pinIdx < 0 || pnetPins[i]->children.size() > 0) {
             pinAccessBoxes[i].emplace_back(pnetPins[i]->layerIdx, database.getLoc(*(pnetPins[i])));
         }
         else {
@@ -209,14 +216,14 @@ void LocalNet::initPNetPins() {
     }
 }
 
-// void printndoes(std::shared_ptr<db::GridSteiner> node) {
-//     const auto &np = database.getLoc(*node);
-//     std::cout << "  " << node->layerIdx << ", " << np << std::endl;
-//     for (auto c : node->children) {
-//         if (c->isVio)
-//             printndoes(c);
-//     }
-// }
+inline void printndoes(std::shared_ptr<db::GridSteiner> node) {
+    const auto &np = database.getLoc(*node);
+    std::cout << "  " << node->layerIdx << ", " << np << ";  pinIdx : " << node->pinIdx << std::endl;
+    for (auto c : node->children) {
+        if (c->isVio)
+            printndoes(c);
+    }
+}
 
 void LocalNet::creatLocalRouteGuides() {
     db::GridBoxOnLayer gbox;
@@ -315,6 +322,7 @@ void LocalNet::creatAdaptiveRouteGuides() {
     std::set<size_t> breaks;
     vector<db::BoxOnLayer> pickedGuides;
     selectGuides(pnetPins[0].get(), selected, breaks, mguides);
+
     if (!breaks.empty()) {
         size_t root = *(breaks.begin());
         breaks.erase(root);
@@ -322,6 +330,27 @@ void LocalNet::creatAdaptiveRouteGuides() {
         curr.push_back(root);
         std::unordered_set<size_t> visitedGuides;
         std::unordered_map<size_t, size_t> parent;
+
+        if (breaks.empty()) {
+            for (auto p : pnetPins) {
+                if (p->distance > -1 || p->pinIdx < 0) continue;
+                DBU mindist = 10000, dist = 0;
+                size_t minid = 0;
+                const auto &ploc = database.getLoc(*p);
+                for (size_t i=0; i<mguides.size(); i++) {
+                    if (mguides[i].layerIdx != p->layerIdx) continue;
+                    dist = utils::Dist(mguides[i], ploc);
+                    if (dist < mindist) {
+                        mindist = dist;
+                        minid = i;
+                    }
+                }
+                breaks.insert(minid);
+                pickedGuides.push_back(mguides[minid]);
+                pickedGuides.back().Update(ploc);
+            }
+        }
+
         while (!breaks.empty() && !curr.empty()) {
             for (size_t i : curr) {
                 const auto &gi = mguides[i];
@@ -355,29 +384,11 @@ void LocalNet::creatAdaptiveRouteGuides() {
     // ensure connectivity
     for (size_t i=0; i<pnetPins.size(); i++) {
         auto p = pnetPins[i];
-        if (p->distance > -1) continue;
+        if (p->distance > -1 || p->pinIdx >= 0) continue;
         int lid = p->layerIdx;
         db::BoxOnLayer patch;
         const auto &pp = database.getLoc(*p);
-        if (pinAccessBoxes[i].size() > 1) {
-            patch = pinAccessBoxes[i][0];
-            for (const auto &pbox : pinAccessBoxes[i]) {
-                patch.x.low = min<DBU>(patch.x.low, pbox.x.low);
-                patch.y.low = min<DBU>(patch.y.low, pbox.y.low);
-                patch.x.high = max<DBU>(patch.x.high, pbox.x.high);
-                patch.y.high = max<DBU>(patch.y.high, pbox.y.high);
-            }
-            for (const auto &g : mguides) {
-                if (g.layerIdx == lid && g.HasIntersectWith(patch)) {
-                    patch.x.low = min<DBU>(patch.x.low, g.x.low);
-                    patch.y.low = min<DBU>(patch.y.low, g.y.low);
-                    patch.x.high = max<DBU>(patch.x.high, g.x.high);
-                    patch.y.high = max<DBU>(patch.y.high, g.y.high);
-                    break;
-                }
-            }
-        }
-        else {
+            printf(" Warning : net %d pnet %d pin %d not real pin but out of guide\n", idx, pnetIdx, int(i));
             for (const auto &g : pickedGuides) {
                 if (g.Contain(pp) && abs(g.layerIdx-p->layerIdx) < 2) {
                     patch = g;
@@ -390,7 +401,7 @@ void LocalNet::creatAdaptiveRouteGuides() {
             patch.layerIdx = lid;
             patch[dir].low = max<DBU>(patch[dir].low, pp[dir]-margin);
             patch[dir].high = min<DBU>(patch[dir].high, pp[dir]+margin);
-        }
+        // }
         pickedGuides.push_back(patch);
     }
     // slice route guide
@@ -449,16 +460,17 @@ void LocalNet::getGridBoxes() {
     database.getGridPinAccessBoxes(dbNet, gridBoxes);
     gridPinAccessBoxes.resize(pnetPins.size());
     for (size_t i=0; i<pnetPins.size(); i++) {
-        if (pnetPins[i]->children.empty() || pnetPins[i]->parent == nullptr) {
-            if (pnetPins[i]->pinIdx < 0)
-                printf("net %d pnetIdx %d pnet %ld is not pin but have no children\n", idx, pnetIdx, i);
+        // if (pnetPins[i]->children.empty() || pnetPins[i]->parent == nullptr) {
+        //     if (pnetPins[i]->pinIdx < 0)
+        //         printf("net %d pnetIdx %d pnet %ld is not pin but have no children\n", idx, pnetIdx, i);
+        if (pnetPins[i]->pinIdx < 0 || pnetPins[i]->children.size() > 0)
+            gridPinAccessBoxes[i].push_back(database.rangeSearch(pinAccessBoxes[i][0]));
+        else {
             gridPinAccessBoxes[i] = move(gridBoxes[pnetPins[i]->pinIdx]);
             pinAccessBoxes[i].clear();
             for (const auto &gbox : gridPinAccessBoxes[i])
                 pinAccessBoxes[i].push_back(database.getLoc(gbox));
         }
-        else
-            gridPinAccessBoxes[i].push_back(database.rangeSearch(pinAccessBoxes[i][0]));
     }
     
     // route guides

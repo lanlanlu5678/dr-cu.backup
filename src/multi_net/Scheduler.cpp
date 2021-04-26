@@ -191,6 +191,7 @@ vector<std::pair<boostBox, int>> PostScheduler::getNetBoxes(const db::Net &dbNet
                 boostBoxes.emplace_back(getBoostBox(edge), node->layerIdx);
             } else {
                 log() << "Warning in " << __func__ << ": invalid edge type. skip." << std::endl;
+                log() << "      " << dbNet.idx << " ; " << edge.u << "," << edge.v << std::endl;
             }
         }
         if (node->extWireSeg) {

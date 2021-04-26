@@ -13,17 +13,14 @@ db::RouteStatus PostRoute::run() {
     db::RouteStatus status = db::RouteStatus::SUCC_NORMAL;
 
     getPinTapPoints();
-    // if (dbNet.idx > 79900) printf(" finished pin taps\n");
 
     pinViaPatches.resize(dbNet.numOfPins());
     status = connectPins();
     if (!db::isSucc(status)) {
         return status;
     }
-    // if (dbNet.idx > 79900) printf(" finished connPins\n");
 
     getTopo();
-    // if (dbNet.idx > 79900) printf(" finished getTopo\n\n\n");
 
     db::routeStat.increment(db::RouteStage::POST, status);
     return status;
@@ -33,6 +30,20 @@ db::RouteStatus PostRoute::connectPins(bool final) {
     db::RouteStatus netStatus = db::RouteStatus::SUCC_NORMAL;
 
     // vector<vector<std::shared_ptr<db::GridSteiner>>> samePinTaps(dbNet.numOfPins());
+
+        // if (final && dbNet.getName() == "net22993") {
+        //     for (int i=0; i<dbNet.numOfPins(); i++) {
+        //         printf("  %d : ", i);
+        //         for (auto p : pinTaps) {
+        //             if (p->pinIdx != i) continue;
+        //             const auto &ploc = database.getLoc(*p);
+        //             std::cout << ploc;
+        //             printf(" via:%d;  ", int(p->viaType==nullptr));
+        //         }
+        //         printf("\n");
+        //     }
+        // }
+
     for (auto tap : pinTaps) {
         // if (final && dbNet.idx > 79900) {
         //     std::cout << *tap << " via null : " << int(tap->viaType == nullptr) << std::endl;

@@ -500,7 +500,7 @@ void PartialRipup::removeSmallLayerSwitch(db::Net &net) {
 void PartialRipup::handlePinSplitVias(db::Net &net) {
     vector<vector<std::shared_ptr<db::GridSteiner>>> pinTaps(net.numOfPins());
     std::shared_ptr<db::GridSteiner> u, v, temp;
-    int numOfOrphal = 0;
+    // int numOfOrphal = 0;
 
     net.postOrderVisitGridTopo([&pinTaps](std::shared_ptr<db::GridSteiner> node) {
         if (node->pinIdx >=0 && node->layerIdx == 0) {
@@ -518,9 +518,9 @@ void PartialRipup::handlePinSplitVias(db::Net &net) {
 
             if ((u->parent!=nullptr && u->children.size() > 0) ||
                 (v->parent!=nullptr && v->children.size() > 0)) {
-                printf("Warning : net %d pin %d (%d,%d,%d) (%d,%d,%d) not terminal\n\n",
-                        net.idx, int(i), u->layerIdx, u->trackIdx, u->crossPointIdx,
-                                            v->layerIdx, v->trackIdx, v->crossPointIdx);
+                // printf("Warning : net %d pin %d (%d,%d,%d) (%d,%d,%d) not terminal\n\n",
+                //         net.idx, int(i), u->layerIdx, u->trackIdx, u->crossPointIdx,
+                //                             v->layerIdx, v->trackIdx, v->crossPointIdx);
                 continue;
             }
             if ((u->parent==nullptr && u->children.empty()) ||
@@ -528,7 +528,7 @@ void PartialRipup::handlePinSplitVias(db::Net &net) {
                 // printf("Warning : net %d pin %d (%d,%d,%d) (%d,%d,%d) orphal\n",
                 //         net.idx, int(i), u->layerIdx, u->trackIdx, u->crossPointIdx,
                 //                             v->layerIdx, v->trackIdx, v->crossPointIdx);
-                numOfOrphal++;
+                // numOfOrphal++;
                 continue;
             }
 
@@ -578,6 +578,8 @@ void PartialRipup::handlePinSplitVias(db::Net &net) {
 
             // printf(" %d:%d;", net.idx, int(i));
     }
+
+    // printf(" number of orphal : %d\n", numOfOrphal);
 }
 
 void PartialRipup::shiftPinGrid(db::Net &net) {
@@ -769,7 +771,7 @@ void PartialRipup::fixMAR(db::Net &net) {
     //     if (pair.first->parent == nullptr || pair.second->parent == nullptr)
     //         printf(" ERROR : unSafe paths has nullptr\n");
     // printf("net %d extracted\n", net.idx);
-    printf(" num of unsafe paths : %d\n", int(unSafePaths.size()));
+    // printf(" num of unsafe paths : %d\n", int(unSafePaths.size()));
 
     for (const auto &pair : unSafePaths) {
         const auto &u = *pair.first;

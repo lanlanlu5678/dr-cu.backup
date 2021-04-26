@@ -85,8 +85,10 @@ bool PostRoute::handlePinVia(const db::GridSteiner &tap) {
     }
     if (forbidSide < 2) {
         for (size_t i : closeIdx) {
-            if (pboxes[i].HasIntersectWith(connBox) ||
-                pboxes[i][forbidSide].HasIntersectWith(viabot[forbidSide]))
+            const auto &patchIts = pboxes[i].IntersectWith(viabot);
+            if (connBox.HasIntersectWith(pboxes[i]) ||
+                patchIts[forbidSide].IsValid() ||
+                !patchIts[1-forbidSide].IsValid())
                 continue;
             patchPinVia(pboxes[i], viabot, pinViaPatches[tap.pinIdx], dbNet);
         }
@@ -179,10 +181,11 @@ bool PostRoute::shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type,
     const auto &pboxes = dbNet.pinAccessBoxes[tap.pinIdx];
     const auto &layer = database.getLayer(0);
     auto viabot = type->getShiftedBotMetal(vialoc);
-    vector<utils::BoxT<DBU>> neiMetals;
+    vector<utils::BoxT<DBU>> neiMetals, connBoxes;
     DBU wSpace = layer.paraRunSpaceForLargerWidth,
-        sSpace = layer.getParaRunSpace(0),
-        // eSpace = layer.maxEolSpace,
+        // sSpace = layer.getParaRunSpace(0),
+        eSpace = layer.maxEolSpace,
+        eolwithin = layer.maxEolWithin,
         wWidth = layer.parallelWidth[1];
     int dir = 1 - layer.direction;
     DBU disp = 0, maxdisp = 0;
@@ -201,97 +204,94 @@ bool PostRoute::shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type,
     database.getFixedBox(qBox, neiMetals, dbNet.idx);
     database.getRoutedBox(qGrid, neiMetals, dbNet.idx);
 
-    // if (neiMetals.empty()) return false;
+    if (neiMetals.empty()) return false;
+    else if (safeShift(tap)) return true;
 
-    if (neiMetals.size() > 0 && safeShift(tap)) return true;
-
-    bool wider = false;
-    vector<utils::IntervalT<DBU>> touched(4);   // yhi(up), ylo(down), xlo(left), xhi(right)
+    // check wider width metal
+    connBoxes.push_back(viabot);
     for (size_t i : cidx) {
-        const auto &pbox = pboxes[i];
-        const auto &its = pbox.IntersectWith(viabot);
-        // if (its.x.range() > 0) {
-        //     if (its.x.range() >= wWidth &&
-        //         (max<DBU>(pbox.y.high, viabot.y.high)-min<DBU>(pbox.y.low, viabot.y.low)) >= wWidth)
-        //         wider = true;
-        //     if (pbox.x.low < viabot.x.low) touched[2].UnionWith(its.x);
-        //     else touched[3].UnionWith(its.x);
-        // }
-        // if (its.y.range() > 0) {
-        //     if (its.y.range() >= wWidth &&
-        //         (max<DBU>(pbox.x.high, viabot.x.high)-min<DBU>(pbox.x.low, viabot.x.low)) >= wWidth)
-        //         wider = true;
-        //     if (pbox.y.low < viabot.y.low) touched[1].UnionWith(its.y);
-        //     else touched[0].UnionWith(its.y);
-        // }
-        if (its.x.range() > 0) {
-            if (its.x.range() >= wWidth &&
-                (max<DBU>(pbox.y.high, viabot.y.high)-min<DBU>(pbox.y.low, viabot.y.low)) >= wWidth)
-                wider = true;
-            if (pbox.y.low <= viabot.y.low) touched[1] = touched[1].UnionWith(its.x);
-            if (pbox.y.high >= viabot.y.high) touched[0] = touched[0].UnionWith(its.x);
+        connBoxes.push_back(pboxes[i]);
+        auto its = pboxes[i].IntersectWith(viabot);
+        if (its.x.range() > 0 && its.y.range() < 0) {
+            std::swap(its.y.low, its.y.high);
+            connBoxes.push_back(its);
         }
-        if (its.y.range() > 0) {
-            if (its.y.range() >= wWidth &&
-                (max<DBU>(pbox.x.high, viabot.x.high)-min<DBU>(pbox.x.low, viabot.x.low)) >= wWidth)
-                wider = true;
-            if (pbox.x.low <= viabot.x.low) touched[2] = touched[2].UnionWith(its.y);
-            if (pbox.x.high >= viabot.x.high) touched[3] = touched[3].UnionWith(its.y);
+        else if (its.x.range() < 0 && its.y.range() > 0) {
+            std::swap(its.x.low, its.x.high);
+            connBoxes.push_back(its);
         }
     }
-    int coveredSides = 0;
-    for (size_t i=0; i<2; i++) {
-        if (touched[i] == viabot.x) coveredSides++;
+    vector<DBU> xlocs;
+    vector<utils::IntervalT<DBU>> yRanges;
+    for (const auto &box : connBoxes) {
+        xlocs.push_back(box.x.low);
+        xlocs.push_back(box.x.high);
     }
-    for (size_t i=2; i<4; i++) {
-        if (touched[i] == viabot.y) coveredSides++;
+    sort(xlocs.begin(), xlocs.end());
+    xlocs.erase(std::unique(xlocs.begin(), xlocs.end()), xlocs.end());
+    size_t numx = xlocs.size() - 1;
+    yRanges.resize(numx);
+    for (const auto &box : connBoxes) {
+        for (size_t i=0; i<yRanges.size(); i++) {
+            if (xlocs[i] < box.x.low) continue;
+            else if (xlocs[i] < box.x.high) {
+                yRanges[i].low = min<DBU>(yRanges[i].low, box.y.low);
+                yRanges[i].high = max<DBU>(yRanges[i].high, box.y.high);
+            }
+            else break;
+        }
     }
+    connBoxes.clear();
+    for (size_t i=0; i<numx; i++) {
+        if (yRanges[i].range() < wWidth) continue;
+        size_t j = i+1;
+        while (j < numx) {
+            const auto &temp = yRanges[i].IntersectWith(yRanges[j]);
+            if (temp.range() < wWidth)
+                break;
+            yRanges[i] = temp;
+            j++;
+        }
 
-    qBox.Set(0, viabot);
+                // if (dbNet.getName() == "net35533") {
+                //     printf(" sSpace : %ld", layer.getParaRunSpace(0));
+                //     printf(" vialoc : ");
+                //     std::cout << vialoc << std::endl;
+                //     for (DBU x : xlocs) printf(" %ld,", x);
+                //     printf("\n");
+                //     for (const auto &y : yRanges) printf(" %ld,%ld; ", y.low, y.high);
+                //     printf("\n");
+                //     printf(" %ld, %ld, %ld, %ld\n", xlocs[i], xlocs[j], yRanges[i].low, yRanges[i].high);
+                // }
+
+        if (xlocs[j] - xlocs[i] >= wWidth &&
+            ((yRanges[i].low <= viabot.y.low && yRanges[i].high >= viabot.y.high) ||
+            (xlocs[i] <= viabot.x.low && xlocs[j] >= viabot.x.high))) {
+            connBoxes.emplace_back(xlocs[i]-wSpace, viabot.y.low-wSpace, xlocs[j]+wSpace, viabot.y.high+wSpace);
+            break;
+        }
+    }
     dir = viabot.x.range() > viabot.y.range() ? 0 : 1; // length dir
-    if (wider || coveredSides > 1) {
-        qBox[1-dir].high += wSpace;
-        qBox[1-dir].low -= wSpace;
-        qBox[dir].high += wSpace;
-        qBox[dir].low -= wSpace;
-        // qBox[dir].high += max<DBU>(wSpace, eSpace);
-        // qBox[dir].low -= max<DBU>(wSpace, eSpace);
-    }
-    else {
-        qBox[1-dir].high += sSpace;
-        qBox[1-dir].low -= sSpace;
-        qBox[dir].high += sSpace;
-        qBox[dir].low -= sSpace;
-    }
+    connBoxes.push_back(viabot);
+    auto &backbox = connBoxes.back();
+    backbox[dir].low -= eSpace;
+    backbox[dir].high += eSpace;
+    backbox[1-dir].low -= eolwithin;
+    backbox[1-dir].high += eolwithin;
 
     dir = 1 - database.getLayerDir(1); // metal 2 pref dir
     for (const auto &nbox : neiMetals) {
-        const auto &its = nbox.IntersectWith(qBox);
-        if (!its.IsValid() || its[dir].range() <= maxdisp) continue;
-        maxdisp = its[dir].range();
-        if (nbox[dir].high > viabot[dir].high) disp = maxdisp * -1;
-        else disp = maxdisp;
+        for (const auto &qbox : connBoxes) {
+            const auto &its = nbox.IntersectWith(qbox);
+            if (!its.IsValid() || its[dir].range() <= maxdisp) continue;
+            maxdisp = its[dir].range();
+            if (nbox[dir].high > viabot[dir].high) disp = maxdisp * -1;
+            else disp = maxdisp;
+        }
     }
 
-    if (disp == 0 || abs(disp) > 60) {
-        // if (coveredSides > 0) {
-        //     for (size_t i : cidx) {
-        //         const auto &pbox = pboxes[i];
-        //         const auto &its = pbox.IntersectWith(viabot);
-        //         if (its.IsValid()) continue;
-        //         else if (its[dir].IsValid() && its[dir].range() <= 10) {
-        //             if (pbox[dir].high > viabot[dir].high) disp = -60;
-        //             else disp = 60;
-        //         }
-        //         else if (its[1-dir].IsValid() && its[1-dir].range() <= 10) {
-        //             disp = viabot[dir].range() > viabot[1-dir].range() ? eSpace : sSpace;
-        //             disp += its[dir].range();
-        //             if (pbox[dir].low > viabot[dir].high) disp = disp * -1;
-        //         }
-        //     }
-        // }
-        // else
-            return false;
+    if (disp == 0 || abs(disp) > 80) {
+        return false;
     }
 
     auto newloc = vialoc;
@@ -332,5 +332,17 @@ bool PostRoute::shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type,
     linkToPins[nei1].emplace_back(vialoc, newloc);
     linkViaToPins[nei1] = std::make_pair(0, newloc);
     linkViaTypes[nei1] = type;
+    // // check connected
+    // disp = 1000;
+    // for (size_t i : cidx) {
+    //     maxdisp = utils::Dist(pboxes[i], viabot);
+    //     if (maxdisp < disp) {
+    //         disp = maxdisp;
+    //         dir = int(i);
+    //     }
+    // }
+    // if (disp > 0) {
+    //     viabot.Set(pboxes[dir].x, pboxes[dir].y);
+    // }
     return true;
 }

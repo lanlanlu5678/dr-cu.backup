@@ -178,12 +178,12 @@ db::RouteStatus MazeRoute::route(int startPin) {
                         log() << box << std::endl;
                 }
             }
-            // printf(" route guides\n");
-            // for (size_t i=0; i<localNet.routeGuides.size(); i++)
-            //     log() << " " << i << " " << localNet.routeGuides[i] << std::endl;
-            // printf(" merged guides\n");
-            // for (const auto &g : localNet.dbNet.mergedGuides)
-            //     log() << g << std::endl;
+            printf(" route guides\n");
+            for (size_t i=0; i<localNet.routeGuides.size(); i++)
+                log() << " " << i << " " << localNet.routeGuides[i] << std::endl;
+            printf(" merged guides\n");
+            for (const auto &g : localNet.dbNet.mergedGuides)
+                log() << g << std::endl;
             printf("\n");
             printWarnMsg(db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH, localNet.dbNet);
             return db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH;

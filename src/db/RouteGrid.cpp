@@ -133,6 +133,7 @@ CostT RouteGrid::getEdgeVioCost(const GridEdge& edge, const int netIdx, bool his
         return getWrongWayWireSegmentVioCost({edge}, netIdx, histCost);
     } else {
         log() << "Warning in RouteGrid::getEdgeVioCost: invalid edge type" << std::endl;
+        log() << "      " << netIdx << " : " << edge.u << "," << edge.v << std::endl;
         return 0;
     }
 }
