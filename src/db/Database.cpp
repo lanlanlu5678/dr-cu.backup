@@ -303,6 +303,7 @@ void Database::markPinAndObsOccupancy() {
     unsigned numUnusedPins = 0;
     unsigned numObs = 0;
     unsigned numSNetObs = 0;
+    obsBoxes.resize(layers.size());
     for (Rsyn::Instance instance : rsynService.module.allInstances()) {
         if (instance.getType() != Rsyn::CELL) continue;
         // phCell
@@ -334,6 +335,7 @@ void Database::markPinAndObsOccupancy() {
                 bounds = transform.apply(bounds);
                 const BoxOnLayer box(layerIdx, getBoxFromRsynBounds(bounds));
                 fixedMetalVec.emplace_back(box, OBS_NET_IDX);
+                obsBoxes[layerIdx].push_back(box);
                 ++numObs;
             }
         }

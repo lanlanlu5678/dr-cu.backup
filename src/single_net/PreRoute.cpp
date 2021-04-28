@@ -254,8 +254,7 @@ bool PreRoute::checkGuideConnTrack() const {
 // PARTIAL RIPUP
 db::RouteStatus PreRoute::localRipup() {
     localNet.initPNetPins();
-    if (localNet.pnetPins.size() == 1) {
-        // printf("net %d pnetIdx %d succ one pin\n", localNet.idx, localNet.pnetIdx);
+    if (localNet.pnetPins.empty()) {
         return db::RouteStatus::SUCC_ONE_PIN;
     }
     // route guides
@@ -270,60 +269,21 @@ db::RouteStatus PreRoute::localRipup() {
     }
     localNet.creatLocalRouteGuides();
     expandGuidesToMargin();
-
-        // if (localNet.getName() == "net27868" && localNet.pnetIdx == 0) {
-        //     printf(" route guides \n");
-        //     // for (const auto &pg : localNet.routeGuides)
-        //     //     std::cout << pg << std::endl;
-        //     for (const auto &acb : localNet.pinAccessBoxes[3])
-        //         std::cout << acb << std::endl;
-        // }
-
     localNet.getGridBoxes();
     localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
-
-        // if (localNet.getName() == "net27868" && localNet.pnetIdx == 0) {
-        //     printf(" grid pin access boxes\n");
-        //     for (const auto &acb : localNet.gridPinAccessBoxes[3])
-        //         std::cout << acb << std::endl;
-        //     printf(" grid route guides\n");
-        //     for (const auto &grg : localNet.gridRouteGuides)
-        //         std::cout << grg << std::endl;
-        // } 
-
     localNet.initNumOfVertices();
     return db::RouteStatus::SUCC_NORMAL;
 }
 
 db::RouteStatus PreRoute::adaptiveRipup() {
     localNet.initPNetPins();
-    if (localNet.pnetPins.size() == 1) {
-        // printf("net %d pnetIdx %d succ one pin\n", localNet.idx, localNet.pnetIdx);
+    if (localNet.pnetPins.empty()) {
         return db::RouteStatus::SUCC_ONE_PIN;
     }
     localNet.creatAdaptiveRouteGuides();
     expandGuidesToMargin();
-
-        // if (localNet.getName() == "net68012" && localNet.pnetIdx == 3) {
-        //     printf(" route guides \n");
-        //     // for (const auto &pg : localNet.routeGuides)
-        //     //     std::cout << pg << std::endl;
-        //     for (const auto &acb : localNet.pinAccessBoxes[2])
-        //         std::cout << acb << std::endl;
-        // }
-
     localNet.getGridBoxes();
     localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
-    
-        // if (localNet.getName() == "net68012" && localNet.pnetIdx == 3) {
-        //     printf(" grid pin access boxes\n");
-        //     for (const auto &acb : localNet.gridPinAccessBoxes[2])
-        //         std::cout << acb << std::endl;
-        //     printf(" grid route guides\n");
-        //     for (const auto &grg : localNet.gridRouteGuides)
-        //         std::cout << grg << std::endl;
-        // }
-
     localNet.initNumOfVertices();
     return db::RouteStatus::SUCC_NORMAL;
 }

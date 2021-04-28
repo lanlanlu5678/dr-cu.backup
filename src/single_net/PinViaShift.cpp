@@ -346,3 +346,89 @@ bool PostRoute::shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type,
     // }
     return true;
 }
+
+bool PostRoute::handleMacroPins(const db::GridSteiner &tap) {
+    int lid = tap.layerIdx;
+    if (lid == 0 || tap.fakePin) return false;
+
+    std::shared_ptr<db::GridSteiner> neiPtr;
+    if (tap.parent == nullptr) neiPtr = tap.children[0];
+    else neiPtr = tap.parent;
+
+    utils::BoxT<DBU> legalBox, obsBox;
+    for (const auto &pab : dbNet.pinAccessBoxes[tap.pinIdx]) {
+        if (pab.layerIdx == lid) {
+            legalBox = pab;
+            break;
+        }
+    }
+    for (const auto &obs : database.obsBoxes[lid]) {
+        if (obs.HasIntersectWith(legalBox)) {
+            obsBox = obs;
+            break;
+        }
+    }
+    if (!obsBox.IsValid()) return false;
+
+        // printf(" net %d pin %d abs num : %d\n", dbNet.idx, tap.pinIdx, int(dbNet.pinAccessBoxes[tap.pinIdx].size()));
+
+    const auto &taploc = database.getLoc(tap);
+
+    bool fix = false;
+    if (neiPtr->layerIdx == lid) {
+        DBU w = database.getLayer(lid).width / 2,
+            thre = database.getLayer(lid).paraRunSpaceForLargerWidth + w;
+        if (legalBox.x.low == obsBox.x.low) legalBox.x.low = -1;
+        else if (legalBox.x.high == obsBox.x.high) legalBox.x.high = std::numeric_limits<DBU>::max();
+        if (legalBox.y.low == obsBox.y.low) legalBox.y.low = -1;
+        else if (legalBox.y.high == obsBox.y.high) legalBox.y.high = std::numeric_limits<DBU>::max();
+        legalBox.x.low += w;
+        legalBox.x.high -= w;
+        legalBox.y.low += w;
+        legalBox.y.high -= w;
+        if (utils::Dist(obsBox, taploc) < thre && !legalBox.Contain(taploc)) {
+            const auto &u = database.getLoc(*neiPtr);
+            const auto &t = legalBox.GetNearestPointTo(u);
+            const auto &v = obsBox.GetNearestPointTo(t);
+            // database.writeDEFWireSegment(dbNet, u, t, lid);
+            // database.writeDEFWireSegment(dbNet, t, v, lid);
+            std::cout << dbNet.getName() << ", " << u << ", " << t << ", " << v << "; " << legalBox << "; " << obsBox << std::endl;
+            linkToPins[neiPtr].emplace_back(u, t);
+            linkToPins[neiPtr].emplace_back(t, v);
+            fix = true;
+        }
+    }
+    else {
+        neiPtr->pinIdx = tap.pinIdx;
+        utils::PointT<DBU> vx(legalBox.cx(), taploc.y), vy(legalBox.cx(), legalBox.cy());
+        linkToPins[neiPtr].emplace_back(taploc, vx);
+        linkToPins[neiPtr].emplace_back(vx, vy);
+        // database.writeDEFWireSegment(dbNet, taploc, vx, p->layerIdx);
+        // database.writeDEFWireSegment(dbNet, vx, vy, p->layerIdx);
+        linkViaToPins[neiPtr] = std::make_pair(min(lid, neiPtr->layerIdx), vy);
+        linkViaTypes[neiPtr] = tap.viaType;
+        fix = true;
+    }
+
+    if (fix) {
+        if (tap.parent == nullptr) {
+            neiPtr->parent = nullptr;
+            for (size_t i=0; i<dbNet.gridTopo.size(); i++) {
+                if (dbNet.gridTopo[i].get() == &tap)
+                    dbNet.gridTopo[i] = neiPtr;
+            }
+        }
+        else {
+            for (size_t i=0; i<neiPtr->children.size(); i++) {
+                if (neiPtr->children[i].get() == &tap) {
+                    neiPtr->children[i] = neiPtr->children.back();
+                    neiPtr->children.pop_back();
+                    break;
+                }
+            }
+        }
+        neiPtr->pinIdx = tap.pinIdx;
+        neiPtr->fakePin = true;
+    }
+    return fix;
+}

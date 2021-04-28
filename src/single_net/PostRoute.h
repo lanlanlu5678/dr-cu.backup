@@ -42,6 +42,7 @@ private:
     bool handlePinVia(const db::GridSteiner &tap);
     bool shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type, const vector<size_t> &cidx);
     bool safeShift(const db::GridSteiner &tap);
+    bool handleMacroPins(const db::GridSteiner &tap);
 };
 
 class MetalFiller {

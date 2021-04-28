@@ -31,14 +31,17 @@ db::RouteStatus PostRoute::connectPins(bool final) {
 
     // vector<vector<std::shared_ptr<db::GridSteiner>>> samePinTaps(dbNet.numOfPins());
 
-        // if (final && dbNet.getName() == "net22993") {
+        // if (final && dbNet.getName() == "net20457") {
         //     for (int i=0; i<dbNet.numOfPins(); i++) {
         //         printf("  %d : ", i);
         //         for (auto p : pinTaps) {
         //             if (p->pinIdx != i) continue;
         //             const auto &ploc = database.getLoc(*p);
-        //             std::cout << ploc;
-        //             printf(" via:%d;  ", int(p->viaType==nullptr));
+        //             std::cout << p->layerIdx << " " << ploc;
+        //             printf(" isVia:%d;  ", int(p->viaType==nullptr));
+        //             if (p->parent == nullptr) continue;
+        //             const auto &pp = database.getLoc(*(p->parent));
+        //             std::cout << p->parent->layerIdx << " " << pp;
         //         }
         //         printf("\n");
         //     }
@@ -48,7 +51,8 @@ db::RouteStatus PostRoute::connectPins(bool final) {
         // if (final && dbNet.idx > 79900) {
         //     std::cout << *tap << " via null : " << int(tap->viaType == nullptr) << std::endl;
         // }
-        if (final && handlePinVia(*tap)) {
+        if (final && (handlePinVia(*tap) || handleMacroPins(*tap))) {
+        // if (final && handlePinVia(*tap)) {
             // if (dbNet.idx > 79900) printf(" succ handle\n");
             continue;
         }

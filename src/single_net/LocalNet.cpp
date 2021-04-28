@@ -196,11 +196,12 @@ void LocalNet::initPNetPins() {
     // do not reroute small pnets
     int dist = 0;
     for (size_t i=1; i<pnetPins.size(); i++) {
-        dist += abs(pnetPins[0]->trackIdx - pnetPins[i]->trackIdx) +
-                abs(pnetPins[0]->crossPointIdx - pnetPins[i]->crossPointIdx);
+        dist += (abs(pnetPins[0]->trackIdx - pnetPins[i]->trackIdx) +
+                abs(pnetPins[0]->crossPointIdx - pnetPins[i]->crossPointIdx));
     }
-    if (pnetPins.size() == 1 || dist < 10) {
-        pnetPins[0]->isVio = false;
+    if (dist < 5) {
+        // pnetPins[0]->isVio = false;
+        pnetPins.clear();
         return;
     }
 
@@ -218,9 +219,10 @@ void LocalNet::initPNetPins() {
 
 inline void printndoes(std::shared_ptr<db::GridSteiner> node) {
     const auto &np = database.getLoc(*node);
-    std::cout << "  " << node->layerIdx << ", " << np << ";  pinIdx : " << node->pinIdx << std::endl;
+    std::cout << "  " << node->layerIdx << ", " << np << ";  pinIdx : " << node->pinIdx
+                << "; vio : " << int(node->isVio) << std::endl;
     for (auto c : node->children) {
-        if (c->isVio)
+        // if (c->isVio)
             printndoes(c);
     }
 }
@@ -386,22 +388,28 @@ void LocalNet::creatAdaptiveRouteGuides() {
         auto p = pnetPins[i];
         if (p->distance > -1 || p->pinIdx >= 0) continue;
         int lid = p->layerIdx;
-        db::BoxOnLayer patch;
+        DBU dist = 0, mindist = std::numeric_limits<DBU>::max();
+        size_t closest;
         const auto &pp = database.getLoc(*p);
-            printf(" Warning : net %d pnet %d pin %d not real pin but out of guide\n", idx, pnetIdx, int(i));
-            for (const auto &g : pickedGuides) {
-                if (g.Contain(pp) && abs(g.layerIdx-p->layerIdx) < 2) {
-                    patch = g;
-                    break;
+        printf(" Warning : net %d pnet %d pin %d not real pin but out of guide\n", idx, pnetIdx, int(i));
+        for (size_t i=0; i<pickedGuides.size(); i++) {
+            if (abs(pickedGuides[i].layerIdx-p->layerIdx) < 2) {
+                dist = utils::Dist(pickedGuides[i], pp);
+                if (dist < mindist) {
+                    mindist = dist;
+                    closest = i;
                 }
+                break;
             }
-            const auto &layer = database.getLayer(lid);
-            DBU margin = layer.pitch * 20;
-            int dir = 1 - layer.direction;
-            patch.layerIdx = lid;
-            patch[dir].low = max<DBU>(patch[dir].low, pp[dir]-margin);
-            patch[dir].high = min<DBU>(patch[dir].high, pp[dir]+margin);
-        // }
+        }
+        const auto &layer = database.getLayer(lid);
+        DBU margin = layer.pitch * 20;
+        int dir = 1 - layer.direction;
+        auto patch = pickedGuides[closest];
+        patch.Update(pp);
+        patch.layerIdx = lid;
+        patch[dir].low = max<DBU>(patch[dir].low, pp[dir]-margin);
+        patch[dir].high = min<DBU>(patch[dir].high, pp[dir]+margin);
         pickedGuides.push_back(patch);
     }
     // slice route guide

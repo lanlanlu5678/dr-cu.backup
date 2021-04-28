@@ -33,6 +33,7 @@ public:
     void getGridPinAccessBoxes(const Net& net, vector<vector<db::GridBoxOnLayer>>& gridPinAccessBoxes) const;
 
     // Extended Content
+    vector<vector<utils::BoxT<DBU>>> obsBoxes;
     int getTrackEnd(int lidx) const { return layers[lidx].tracks.size() - 1; };
     int getCrossPointEnd(int lidx) const { return layers[lidx].crossPoints.size() - 1; };
     utils::BoxT<DBU> getWireBox(int layerIdx, utils::PointT<DBU> pu, utils::PointT<DBU> pv) const;

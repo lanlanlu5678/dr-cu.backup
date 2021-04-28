@@ -1,5 +1,15 @@
 #include "PartialRipup.h"
 
+inline void printndoes(std::shared_ptr<db::GridSteiner> node) {
+    const auto &np = database.getLoc(*node);
+    std::cout << "  " << node->layerIdx << ", " << np << ";  pinIdx : " << node->pinIdx
+                << "; vio : " << int(node->isVio) << std::endl;
+    for (auto c : node->children) {
+        // if (c->isVio)
+            printndoes(c);
+    }
+}
+
 void PartialRipup::mergeRouteGuides(db::Net &net) {
     vector<int> clusters;
     vector<vector<utils::BoxT<DBU>>> guides(database.getLayerNum());
@@ -582,103 +592,8 @@ void PartialRipup::handlePinSplitVias(db::Net &net) {
     // printf(" number of orphal : %d\n", numOfOrphal);
 }
 
-void PartialRipup::shiftPinGrid(db::Net &net) {
-    vector<std::shared_ptr<db::GridSteiner>> mpins;
-    std::shared_ptr<db::GridSteiner> turn, dstp;
-    db::BoxOnLayer ab, abbbox;
-    net.postOrderVisitGridTopo([&mpins](std::shared_ptr<db::GridSteiner> node) {
-        if (node->pinIdx > 0 && node->layerIdx > 0 && node->parent && node->viaType == nullptr)
-            mpins.push_back(node);
-    });
-
-    // if (!mpins.empty()) std::cout << "   " << net.getName() << "(" << net.idx << ")" << std::endl;
-
-    const auto &pabs = net.pinAccessBoxes;
-    for (auto p : mpins) {
-        int pid = p->pinIdx;
-
-            // printf("     %d,%d,%d\n", p->layerIdx, p->trackIdx, p->crossPointIdx);
-            // for (const auto &ab : pabs[pid]) if (ab.layerIdx == p->layerIdx) std::cout << ab << std::endl;
-            // printf("\n");
-
-        // if (pabs[pid].size() > 1) continue;
-        const auto &np = database.getLoc(*p);
-        DBU halfWidth = database.getLayer(p->layerIdx).width / 2;
-        for (const auto &pab : pabs[pid]) if (pab.layerIdx == p->layerIdx) {ab = pab; break;}
-        abbbox.Set();
-        for (size_t i=0; i<pabs.size(); i++) {
-            for (const auto &pab : pabs[i]) {
-                if (pab.layerIdx == ab.layerIdx && (pab.x == ab.x || pab.y == ab.y))
-                    abbbox.Set(ab.layerIdx, abbbox.UnionWith(pab));
-            }
-        }
-        for (int d=0; d<2; d++) {
-            ab[d].low += halfWidth;
-            ab[d].high -= halfWidth;
-        }
-        if (ab.x.Contain(np.x) || ab.y.Contain(np.y)) continue;
-
-            // printf("    begin shift\n");
-            // if (p->layerIdx == 7 && p->trackIdx == 5569 && p->crossPointIdx == 2) {
-            //     std::cout << "  abbbox : " << abbbox << std::endl;
-            //     if (!abbbox.IsValid()) {
-            //         for (size_t i=0; i<pabs.size(); i++) {
-            //             for (const auto &pab : pabs[i]) {
-            //                 std::cout << pab << std::endl;
-            //             }
-            //         }
-            //     }
-            //     printf(" p no parent : %d", int(p->parent == nullptr));
-            //     printf("\n\n\n");
-            // }
-
-        database.removeEdge({*p, *(p->parent)}, net.idx);
-        const auto &gab = database.rangeSearch(ab);
-        const auto &gabbbox = database.rangeSearch(abbbox);
-
-        // // debug
-        // if (p->layerIdx == 7 && p->trackIdx == 5569 && p->crossPointIdx == 2) {
-        //     std::cout << "   " << net.getName() << "(" << net.idx << ");    gab : ";
-        //     printf(" t:%d,%d,  c:%d,%d\n", gab.trackRange.low, gab.trackRange.high,
-        //                                     gab.crossPointRange.low, gab.crossPointRange.high);
-        //     int step = 3;
-        //     auto t = p;
-        //     while (step--) {printf(" %d,%d,%d ", t->layerIdx, t->trackIdx, t->crossPointIdx); t = t->parent;}
-        //     printf("\n\n\n");
-        // }
-
-        p = p->parent;
-        auto &cs = p->children;
-        for (auto it=cs.begin(); it!=cs.end(); it++) {
-            if ((*it)->pinIdx > 0) {
-                *it = cs.back();
-                cs.pop_back();
-                break;
-            }
-        }
-        int dt = 0, dc = 0;
-        if (gab.trackRange.low > p->trackIdx)
-            dt = gab.trackRange.low;
-        else
-            dt = gab.trackRange.high;
-        if (gab.crossPointRange.low > p->crossPointIdx)
-            dc = gab.crossPointRange.low;
-        else
-            dc = gab.crossPointRange.high;
-        if (p->trackIdx >= gabbbox.trackRange.low && p->trackIdx <= gabbbox.trackRange.high) {
-            turn = std::make_shared<db::GridSteiner>(db::GridPoint(p->layerIdx, dt, p->crossPointIdx));
-            dstp = std::make_shared<db::GridSteiner>(db::GridPoint(p->layerIdx, dt, dc));
-        }
-        else {
-            turn = std::make_shared<db::GridSteiner>(db::GridPoint(p->layerIdx, p->trackIdx, dc));
-            dstp = std::make_shared<db::GridSteiner>(db::GridPoint(p->layerIdx, dt, dc));
-        }
-        p->children.push_back(turn);
-        turn->parent = p;
-        turn->children.push_back(dstp);
-        dstp->parent = turn;
-        dstp->pinIdx = pid;
-    }
+void PartialRipup::handleMacroPins(db::Net &net) {
+    return;
 }
 
 inline bool notCorner(const db::GridPoint &u, const db::GridPoint &v) {
