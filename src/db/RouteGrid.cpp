@@ -450,6 +450,7 @@ CostT RouteGrid::getWireSegmentVioCost(const TrackSegment& ts, const int netIdx,
     iterateWireSegments(ts, netIdx, [&](const utils::IntervalT<int>& intvl, int usage) {
         DBU dist = layers[ts.layerIdx].getCrossPointRangeDistCost(intvl);
         cost += unitShortVioCostDiscounted[ts.layerIdx] * usage * dist;
+        // cost += unitShortVioCostDiscounted[ts.layerIdx] * usage * (intvl.high - intvl.low);
     });
     // 1.2 Space
     cost += (unitSpaceVioCostDiscounted * getWireSegmentSpaceVioOnWires(ts, netIdx).size());

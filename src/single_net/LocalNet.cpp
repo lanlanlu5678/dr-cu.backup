@@ -389,7 +389,7 @@ void LocalNet::creatAdaptiveRouteGuides() {
         if (p->distance > -1 || p->pinIdx >= 0) continue;
         int lid = p->layerIdx;
         DBU dist = 0, mindist = std::numeric_limits<DBU>::max();
-        size_t closest;
+        size_t closest = 100000;
         const auto &pp = database.getLoc(*p);
         printf(" Warning : net %d pnet %d pin %d not real pin but out of guide\n", idx, pnetIdx, int(i));
         for (size_t i=0; i<pickedGuides.size(); i++) {
@@ -402,15 +402,17 @@ void LocalNet::creatAdaptiveRouteGuides() {
                 break;
             }
         }
-        const auto &layer = database.getLayer(lid);
-        DBU margin = layer.pitch * 20;
-        int dir = 1 - layer.direction;
-        auto patch = pickedGuides[closest];
-        patch.Update(pp);
-        patch.layerIdx = lid;
-        patch[dir].low = max<DBU>(patch[dir].low, pp[dir]-margin);
-        patch[dir].high = min<DBU>(patch[dir].high, pp[dir]+margin);
-        pickedGuides.push_back(patch);
+        if (closest < 100000) {
+            const auto &layer = database.getLayer(lid);
+            DBU margin = layer.pitch * 20;
+            int dir = 1 - layer.direction;
+            auto patch = pickedGuides[closest];
+            patch.Update(pp);
+            patch.layerIdx = lid;
+            patch[dir].low = max<DBU>(patch[dir].low, pp[dir]-margin);
+            patch[dir].high = min<DBU>(patch[dir].high, pp[dir]+margin);
+            pickedGuides.push_back(patch);
+        }
     }
     // slice route guide
     for (auto p : pnetPins) {

@@ -82,8 +82,8 @@ public:
     // PARTIAL RIPUP
     bool localRipup = false;
     bool adaptiveRipup = false;
-    bool guideRipup = false;
     bool fullyRoute = true;
+    bool greedyRoute = false;
     bool constrainInGuides = true;
 };
 

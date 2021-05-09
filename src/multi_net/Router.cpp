@@ -1,5 +1,6 @@
 #include "Router.h"
 #include "Scheduler.h"
+#include "single_net/SeqRouter.h"
 #include "single_net/PartialRipup.h"
 
 const MTStat& MTStat::operator+=(const MTStat& rhs) {
@@ -27,15 +28,14 @@ ostream& operator<<(ostream& os, const MTStat mtStat) {
     return os;
 }
 
-inline void printndoes(std::shared_ptr<db::GridSteiner> node) {
+inline void printnodes(std::shared_ptr<db::GridSteiner> node) {
     // const auto &np = database.getLoc(*node);
-    // std::cout << node->layerIdx << ", " << np << " via : " << int(node->viaType != nullptr) << " pinIdx : " << node->pinIdx << std::endl;
     std::cout << *node << "; ";
     if (node->parent) std::cout << *(node->parent);
     std::cout << std::endl;
     for (auto c : node->children) {
         // if (c->isVio)
-            printndoes(c);
+            printnodes(c);
     }
 }
 
@@ -63,13 +63,14 @@ void Router::run() {
             if (db::rrrIterSetting.fullyRoute)
                 ripup(netsToRoute);
             else
-                // PARTIAL RIPUP
                 partialRipup(netsToRoute);
         }
         database.statHistCost();
         if (db::setting.rrrIterLimit > 1) {
             double step = (1.0 - db::setting.rrrInitVioCostDiscount) / (db::setting.rrrIterLimit - 1);
             database.setUnitVioCost(db::setting.rrrInitVioCostDiscount + step * iter);
+            // double step = (1.0 - db::setting.rrrInitVioCostDiscount) / (db::setting.rrrIterLimit - 2);
+            // database.setUnitVioCost(min<double>(db::setting.rrrInitVioCostDiscount + step * iter, 1.0));
         }
         if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
             db::rrrIterSetting.print();
@@ -105,7 +106,6 @@ vector<int> Router::getNetsToRoute() {
     vector<int> netsToRoute;
     if (iter == 0) {
         for (int i = 0; i < database.nets.size(); i++) {
-            // if (database.nets[i].getName() == "net8984") netsToRoute.push_back(i);
             netsToRoute.push_back(i);
         }
     } else {
@@ -121,7 +121,7 @@ vector<int> Router::getNetsToRoute() {
 
 void Router::ripup(const vector<int>& netsToRoute) {
     for (auto netIdx : netsToRoute) {
-        UpdateDB::clearRouteResult(database.nets[netIdx]);
+        // UpdateDB::clearRouteResult(database.nets[netIdx]);
         allNetStatus[netIdx] = db::RouteStatus::FAIL_UNPROCESSED;
     }
 }
@@ -141,6 +141,62 @@ void Router::partialRipup(vector<int> &nets) {
 void Router::updateCost(const vector<int>& netsToRoute) {
     database.addHistCost();
     database.fadeHistCost(netsToRoute);
+}
+
+void Router::assignSeqRouter(const vector<SingleNetRouter> &routers, vector<SeqRouter> &seqRouters) {
+    vector<int> assigned(routers.size(), 0);
+    vector<double> areas(routers.size(), 0);
+
+    for (size_t i=0; i<routers.size(); i++) {
+        if (!db::isSucc(routers[i].status) || routers[i].status == +db::RouteStatus::SUCC_ONE_PIN)
+            assigned[i] = 1;
+    }
+
+    for (size_t i=0; i<routers.size(); i++) {
+        if (assigned[i] > 0) continue;
+        assigned[i] = 1;
+        seqRouters.emplace_back(int(i), routers[i].localNet.estimatedNumOfVertices);
+        auto &sr = seqRouters.back();
+        double seqArea = 0;
+        if (areas[i] > 0) seqArea = areas[i];
+        else for (const auto &box : routers[i].localNet.routeGuides)
+            seqArea += double(box.area());
+        for (const auto &box : routers[i].localNet.routeGuides)
+            sr.bboxes[box.layerIdx] = box;  // route guides before sliced
+        // sr.routerIds.push_back(i);
+
+        for (size_t j=i+1; j<routers.size(); j++) {
+            // if (sr.routerIds.size() > 5) break;
+            if (assigned[j] > 0) continue;
+            double currArea = 0, ovlpArea = 0;
+            if (areas[j] > 0) currArea = areas[j];
+            else for (const auto &box : routers[j].localNet.routeGuides)
+                currArea += double(box.area());
+            
+            for (const auto &box : routers[j].localNet.routeGuides) {
+                const auto &its = box.IntersectWith(sr.bboxes[box.layerIdx]);
+                if (!its.IsValid()) continue;
+                ovlpArea += double(its.area());
+            }
+
+            if (ovlpArea/seqArea > 0.6 || ovlpArea/currArea > 0.6) {
+                assigned[j] = 1;
+                sr.routerIds.push_back(int(j));
+                sr.numV += routers[j].localNet.estimatedNumOfVertices;
+                // seqArea += (currArea - ovlpArea);
+                for (const auto &box : routers[j].localNet.routeGuides) {
+                    sr.bboxes[box.layerIdx] = sr.bboxes[box.layerIdx].UnionWith(box);
+                }
+                seqArea = 0;
+                for (const auto &box : sr.bboxes) seqArea += box.area();
+            }
+        }
+    }
+
+    printf("  SeqRouters : %d\n", int(seqRouters.size()));
+    for (const auto &sr : seqRouters)
+        printf("    %d, ", int(sr.routerIds.size()));
+    printf("\n");
 }
 
 void Router::route(const vector<int>& netsToRoute) {
@@ -219,7 +275,7 @@ void Router::route(const vector<int>& netsToRoute) {
         }
         iBatch++;
     }
-    if (iter > 0) {
+    if (!db::rrrIterSetting.fullyRoute) {
         runJobsMT(netsToRoute.size(), [&](int id) {
             auto &net = database.nets[id];
             PostMazeRoute(net).run();
@@ -308,7 +364,7 @@ void Router::finish() {
         int count = 0;
         for (auto& net : database.nets) {
             if (net.defWireSegments.empty() && net.numOfPins() > 1) {
-                log() << " connect net " << net.idx << " by stt for " << allNetStatus[net.idx] << std::endl;
+                // log() << " connect net " << net.idx << " by stt for " << allNetStatus[net.idx] << std::endl;
                 connectBySTT(net);
                 count++;
             }

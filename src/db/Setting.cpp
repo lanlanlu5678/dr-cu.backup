@@ -35,24 +35,20 @@ void RrrIterSetting::update(int iter) {
 
         // PARTIAL RIPUP
         if (iter == 1) {
+            // constrainInGuides = false;
             fullyRoute = false;
-            constrainInGuides = false;
             localRipup = true;
         }
         else if (iter == 2) {
             localRipup = false;
             adaptiveRipup = true;
         }
-        // else if (iter == 3) {
-        //     adaptiveRipup = false;
-        //     guideRipup = true;
-        // }
-        // else if (iter == 4) {
-        //     guideRipup = false;
-        //     fullyRoute = true;
-        // }
         else {
-            fullyRoute = true;
+            // defaultGuideExpand = iter;
+            constrainInGuides = false;
+            // adaptiveRipup = false;
+            // fullyRoute = true;
+            greedyRoute = true;
         }
     }
     converMinAreaToOtherVio = ((iter + 1) < setting.rrrIterLimit);

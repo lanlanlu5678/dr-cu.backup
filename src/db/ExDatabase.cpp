@@ -75,6 +75,8 @@ int Database::getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const
     // queryGridBox.crossPointRange.high += 1;
     // getRoutedBox(queryGridBox, neiMetals, netIdx);
 
+    if (!isValid(queryGridBox)) return countOvlp(box, regions, neiMetals);
+
     // routed metal (via only)
     GridPoint via;
     int lc=0, uc=0;
@@ -348,6 +350,17 @@ utils::IntervalT<DBU> Database::getEmptyRange(int layerIdx, int trackIdx, int cp
     }
 
     return availItl;
+}
+
+void Database::clearHisCost() {
+    histWireMap.clear();
+    histViaMap.clear();
+    histWireMap.resize(layers.size());
+    histViaMap.resize(layers.size());
+    for (size_t i=0; i<layers.size(); i++) {
+        histWireMap[i].resize(layers[i].numTracks());
+        histViaMap[i].resize(layers[i].numTracks());
+    }
 }
 
 }   // namespace db

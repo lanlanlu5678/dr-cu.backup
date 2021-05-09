@@ -50,6 +50,8 @@ public:
                             const vector<utils::BoxT<DBU>> &regions,
                             const vector<utils::BoxT<DBU>> &neiMetals) const;
     utils::IntervalT<DBU> getEmptyRange(int layerIdx, int trackIdx, int cpIdx, int netIdx) const;
+    void clearHisCost();
+
 private:
     RsynService rsynService;
 

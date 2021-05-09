@@ -392,7 +392,7 @@ bool PostRoute::handleMacroPins(const db::GridSteiner &tap) {
             const auto &v = obsBox.GetNearestPointTo(t);
             // database.writeDEFWireSegment(dbNet, u, t, lid);
             // database.writeDEFWireSegment(dbNet, t, v, lid);
-            std::cout << dbNet.getName() << ", " << u << ", " << t << ", " << v << "; " << legalBox << "; " << obsBox << std::endl;
+            // std::cout << dbNet.getName() << ", " << u << ", " << t << ", " << v << "; " << legalBox << "; " << obsBox << std::endl;
             linkToPins[neiPtr].emplace_back(u, t);
             linkToPins[neiPtr].emplace_back(t, v);
             fix = true;
