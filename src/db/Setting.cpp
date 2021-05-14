@@ -28,14 +28,9 @@ void RrrIterSetting::update(int iter) {
     } else {
         defaultGuideExpand += iter * 2;
         wrongWayPointDensity = std::min(1.0, wrongWayPointDensity + 0.1);
-        // if (database.nets.size() < 200000) {
-        //     // high-effort mode (exclude million-net test case)
-        //     addDiffLayerGuides = true;
-        // }
 
         // PARTIAL RIPUP
         if (iter == 1) {
-            // constrainInGuides = false;
             fullyRoute = false;
             localRipup = true;
         }
@@ -43,13 +38,13 @@ void RrrIterSetting::update(int iter) {
             localRipup = false;
             adaptiveRipup = true;
         }
-        else {
+        // else {
             // defaultGuideExpand = iter;
-            constrainInGuides = false;
+            // constrainInGuides = false;
             // adaptiveRipup = false;
             // fullyRoute = true;
-            greedyRoute = true;
-        }
+            // greedyRoute = true;
+        // }
     }
     converMinAreaToOtherVio = ((iter + 1) < setting.rrrIterLimit);
 }

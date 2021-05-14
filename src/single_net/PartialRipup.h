@@ -11,7 +11,8 @@ class PartialRipup {
     static void markLocalRipup(db::Net &net);
     static void markAdaptiveRipup(db::Net &net);
 
-    static void merge(std::shared_ptr<db::GridSteiner> node, int thre);
+    static void mergeByGrids(std::shared_ptr<db::GridSteiner> node, int thre);
+    static void mergeByNodes(std::shared_ptr<db::GridSteiner> node, int thre);
     static void removeDBEdges(std::shared_ptr<db::GridSteiner> node, int idx);
 
     static void removeSmallLayerSwitch(db::Net &net);

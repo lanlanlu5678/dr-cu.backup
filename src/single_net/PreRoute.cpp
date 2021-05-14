@@ -269,6 +269,23 @@ db::RouteStatus PreRoute::localRipup() {
     }
     localNet.creatLocalRouteGuides();
     expandGuidesToMargin();
+    auto &gs = localNet.routeGuides;
+    size_t rsize = gs.size();
+    int lnum = database.getLayerNum() - 1;
+    for (size_t i=0; i<rsize; i++) {
+        const auto &g = gs[i];
+        int l = g.layerIdx;
+        // if (l > 2) routeGuides.emplace_back(l-1, g);
+        if (db::rrrIterSetting.greedyRoute) {
+            if (l > 1) gs.emplace_back(l-1, g);
+            if (l < lnum) gs.emplace_back(l+1, g);
+        }
+        else {
+            if (l < lnum) gs.emplace_back(l+1, g);
+            else gs.emplace_back(l-1, g);
+        }
+        db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
+    }
     localNet.getGridBoxes();
     localNet.initConn(localNet.gridPinAccessBoxes, localNet.gridRouteGuides);
     localNet.initNumOfVertices();

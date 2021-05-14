@@ -261,16 +261,6 @@ void LocalNet::creatLocalRouteGuides() {
     //     routeGuides.emplace_back(routeGuides[0].layerIdx + 1, routeGuides[0]);
     //     db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
     // }
-    size_t rsize = routeGuides.size();
-    int lnum = database.getLayerNum() - 1;
-    for (size_t i=0; i<rsize; i++) {
-        const auto &g = routeGuides[i];
-        int l = g.layerIdx;
-        // if (l > 2) routeGuides.emplace_back(l-1, g);
-        if (l < lnum) routeGuides.emplace_back(l+1, g);
-        else routeGuides.emplace_back(l-1, g);
-        db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
-    }
 }
 
 void selectGuides(db::GridSteiner *node,

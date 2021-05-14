@@ -352,6 +352,49 @@ utils::IntervalT<DBU> Database::getEmptyRange(int layerIdx, int trackIdx, int cp
     return availItl;
 }
 
+vector<std::pair<utils::IntervalT<int>, int>> Database::getRoutedWiresOnTrackSeg(int l, int t, int clo, int chi) const {
+    vector<std::pair<utils::IntervalT<int>, int>> results;
+    auto queryInterval = boost::icl::interval<int>::closed(clo, chi);
+    auto intervals = routedWireMap[l][t].equal_range(queryInterval);
+    for (auto it = intervals.first; it != intervals.second; ++it) {
+        for (int id : it->second)
+            results.push_back(std::make_pair(utils::IntervalT<int>(first(it->first), last(it->first)), id));
+    }
+    return results;
+}
+
+vector<std::pair<utils::IntervalT<int>, int>> Database::getPoorWiresOnTrackSeg(int l, int t, int clo, int chi) const {
+    vector<std::pair<utils::IntervalT<int>, int>> results;
+    auto queryInterval = boost::icl::interval<int>::closed(clo, chi);
+    auto intervals = poorWireMap[l][t].equal_range(queryInterval);
+    for (auto it = intervals.first; it != intervals.second; ++it) {
+        results.push_back(std::make_pair(utils::IntervalT<int>(first(it->first), last(it->first)), it->second.netIdx));
+    }
+    return results;
+}
+
+vector<std::pair<int, int>> Database::getViasOnTrackSeg(int l, int t, int clo, int chi) const {
+    vector<std::pair<int, int>> results;
+    auto lb = routedViaMap[l][t].lower_bound(clo), ub = routedViaMap[l][t].upper_bound(chi);
+    for (auto it=lb; it!=ub; it++) {
+        results.push_back({it->first, it->second});
+    }
+    return results;
+}
+
+vector<std::pair<int, int>> Database::getLowerViasOnTrackSeg(int l, int t, int clo, int chi) const {
+    vector<std::pair<int, int>> results;
+    auto lb = routedViaMapUpper[l][t].lower_bound(clo), ub = routedViaMapUpper[l][t].upper_bound(chi);
+    for (auto it=lb; it!=ub; it++) {
+        results.push_back({it->first, it->second});
+    }
+    return results;
+}
+
+utils::IntervalT<int> Database::getWrieSpacingRange(int layerIdx, const utils::IntervalT<int> &wire) const {
+    return {layers[layerIdx].wireRange[wire.low].low, layers[layerIdx].wireRange[wire.high].high};
+}
+
 void Database::clearHisCost() {
     histWireMap.clear();
     histViaMap.clear();
@@ -365,111 +408,3 @@ void Database::clearHisCost() {
 
 }   // namespace db
 
-
-
-// const ViaType * Database::getBestViaTypeForShift(const BoxOnLayer &accessBox) const {
-//     const auto &cutLayer = cutLayers[0];
-//     int dir = 1 - layers[1].direction;
-//     for (const auto &type : cutLayer.allViaTypes) {
-//         if (type.topDir == dir &&
-//             accessBox.x.range() >= type.bot.x.range() &&
-//             accessBox.y.range() >= type.bot.y.range()) {
-//             return &type;
-//         }
-//     }
-//     return nullptr;
-// }
-
-// int Database::getPinViaVio(const BoxOnLayer& box, int netIdx, bool debug) const {
-//     int lid = box.layerIdx;
-//     const auto &regions = getAccurateMetalRectForbidRegions(box);
-//     utils::BoxT<DBU> queryBox = box;
-//     queryBox.x.low -= layers[lid].fixedMetalQueryMargin;
-//     queryBox.x.high += layers[lid].fixedMetalQueryMargin;
-//     queryBox.y.low -= layers[lid].fixedMetalQueryMargin;
-//     queryBox.y.high += layers[lid].fixedMetalQueryMargin;
-
-//     for (const auto& region : regions) {
-//         queryBox = queryBox.UnionWith(region);
-//     }
-
-//     // fixed metal
-//     boostBox rtreeQueryBox(boostPoint(queryBox.x.low, queryBox.y.low), boostPoint(queryBox.x.high, queryBox.y.high));
-//     vector<std::pair<boostBox, int>> queryResults;
-//     fixedMetals[lid].query(bgi::intersects(rtreeQueryBox), std::back_inserter(queryResults));
-//     vector<utils::BoxT<DBU>> neiMetals;
-//     for (const auto& queryResult : queryResults) {
-//         if (queryResult.second != netIdx) {
-//             const auto& b = queryResult.first;
-//             neiMetals.emplace_back(bg::get<bg::min_corner, 0>(b),
-//                                     bg::get<bg::min_corner, 1>(b),
-//                                     bg::get<bg::max_corner, 0>(b),
-//                                     bg::get<bg::max_corner, 1>(b));
-//         }
-//     }
-
-//     // routed metal (via only)
-//     GridBoxOnLayer queryGridBox = rangeSearch(BoxOnLayer(lid, queryBox));
-//     GridPoint via;
-//     int lc=0, uc=0;
-//     if (lid > 0) {
-//         int low = lid - 1;
-//         via.layerIdx = low;
-//         const auto &loBox = getLower(queryGridBox);
-//         lc = max(0, loBox.crossPointRange.low - 1);
-//         uc = min(layers[low].numCrossPoints() - 1, loBox.crossPointRange.high + 1);
-//         for (int t=loBox.trackRange.low-1; t<=loBox.trackRange.high; t++) {
-//             via.trackIdx = t;
-//             auto itLo = routedViaMap[low][t].lower_bound(lc);
-//             auto itHi = routedViaMap[low][t].upper_bound(uc);
-//             for (auto it=itLo; it!=itHi; it++) {
-//                 if (it->second == netIdx) continue;
-//                 via.crossPointIdx = it->first;
-//                 const auto &viaLoc = getLoc(via);
-//                 const auto viaType = getViaType(via);
-//                 neiMetals.push_back(viaType->getShiftedTopMetal(viaLoc));
-//             }
-//         }
-//     }
-//     lc = max(0, queryGridBox.crossPointRange.low - 1);
-//     uc = min(layers[lid].numCrossPoints() - 1, queryGridBox.crossPointRange.high + 1);
-//     via.layerIdx = lid;
-//     for (int t=queryGridBox.trackRange.low-1; t<=queryGridBox.trackRange.high; t++) {
-//         via.trackIdx = t;
-//         auto itLo = routedViaMap[lid][t].lower_bound(lc);
-//         auto itHi = routedViaMap[lid][t].upper_bound(uc);
-//         for (auto it=itLo; it!=itHi; it++) {
-//             if (it->second == netIdx) continue;
-//             via.crossPointIdx = it->first;
-//             const auto &viaLoc = getLoc(via);
-//             const auto viaType = getViaType(via);
-//             neiMetals.push_back(viaType->getShiftedBotMetal(viaLoc));
-//         }
-//     }
-
-//     if (debug) {
-//         log() << " ------ getPinLinkVio ------ " << std::endl;
-//         log() << "   forbid regions for : " << box << std::endl;
-//         for (const auto &region : regions)
-//             log() << "      " << region << std::endl;
-//         log() << "   neiMetals : " << std::endl;
-//         for (const auto &nm : neiMetals)
-//             log() << "      " << nm << std::endl;
-//     }
-
-//     return countOvlp(box, regions, neiMetals);
-// }
-
-// int Database::countFixedMetals(const utils::BoxT<DBU> &viaBox, int netIdx) const {
-//     DBU space = layers[0].paraRunSpaceForLargerWidth;
-//     boostBox rtreeQueryBox(boostPoint(viaBox.x.low-space, viaBox.y.low-space),
-//                             boostPoint(viaBox.x.high+space, viaBox.y.high+space));
-//     vector<std::pair<boostBox, int>> queryResults;
-//     fixedMetals[0].query(bgi::intersects(rtreeQueryBox), std::back_inserter(queryResults));
-    
-//     int num = 0;
-//     for (const auto &pair : queryResults) {
-//         if (pair.second != netIdx) num++;
-//     }
-//     return num;
-// }

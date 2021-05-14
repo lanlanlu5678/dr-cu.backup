@@ -91,6 +91,7 @@ void Router::run() {
         //     unfinish();
         // }
     }
+    greedyRoute();
     finish();
     log() << std::endl;
     log() << "################################################################" << std::endl;
@@ -143,61 +144,61 @@ void Router::updateCost(const vector<int>& netsToRoute) {
     database.fadeHistCost(netsToRoute);
 }
 
-void Router::assignSeqRouter(const vector<SingleNetRouter> &routers, vector<SeqRouter> &seqRouters) {
-    vector<int> assigned(routers.size(), 0);
-    vector<double> areas(routers.size(), 0);
+// void Router::assignSeqRouter(const vector<SingleNetRouter> &routers, vector<SeqRouter> &seqRouters) {
+//     vector<int> assigned(routers.size(), 0);
+//     vector<double> areas(routers.size(), 0);
 
-    for (size_t i=0; i<routers.size(); i++) {
-        if (!db::isSucc(routers[i].status) || routers[i].status == +db::RouteStatus::SUCC_ONE_PIN)
-            assigned[i] = 1;
-    }
+//     for (size_t i=0; i<routers.size(); i++) {
+//         if (!db::isSucc(routers[i].status) || routers[i].status == +db::RouteStatus::SUCC_ONE_PIN)
+//             assigned[i] = 1;
+//     }
 
-    for (size_t i=0; i<routers.size(); i++) {
-        if (assigned[i] > 0) continue;
-        assigned[i] = 1;
-        seqRouters.emplace_back(int(i), routers[i].localNet.estimatedNumOfVertices);
-        auto &sr = seqRouters.back();
-        double seqArea = 0;
-        if (areas[i] > 0) seqArea = areas[i];
-        else for (const auto &box : routers[i].localNet.routeGuides)
-            seqArea += double(box.area());
-        for (const auto &box : routers[i].localNet.routeGuides)
-            sr.bboxes[box.layerIdx] = box;  // route guides before sliced
-        // sr.routerIds.push_back(i);
+//     for (size_t i=0; i<routers.size(); i++) {
+//         if (assigned[i] > 0) continue;
+//         assigned[i] = 1;
+//         seqRouters.emplace_back(int(i), routers[i].localNet.estimatedNumOfVertices);
+//         auto &sr = seqRouters.back();
+//         double seqArea = 0;
+//         if (areas[i] > 0) seqArea = areas[i];
+//         else for (const auto &box : routers[i].localNet.routeGuides)
+//             seqArea += double(box.area());
+//         for (const auto &box : routers[i].localNet.routeGuides)
+//             sr.routeGuides[box.layerIdx] = box;  // route guides before sliced
+//         // sr.routerIds.push_back(i);
 
-        for (size_t j=i+1; j<routers.size(); j++) {
-            // if (sr.routerIds.size() > 5) break;
-            if (assigned[j] > 0) continue;
-            double currArea = 0, ovlpArea = 0;
-            if (areas[j] > 0) currArea = areas[j];
-            else for (const auto &box : routers[j].localNet.routeGuides)
-                currArea += double(box.area());
+//         for (size_t j=i+1; j<routers.size(); j++) {
+//             // if (sr.routerIds.size() > 5) break;
+//             if (assigned[j] > 0) continue;
+//             double currArea = 0, ovlpArea = 0;
+//             if (areas[j] > 0) currArea = areas[j];
+//             else for (const auto &box : routers[j].localNet.routeGuides)
+//                 currArea += double(box.area());
             
-            for (const auto &box : routers[j].localNet.routeGuides) {
-                const auto &its = box.IntersectWith(sr.bboxes[box.layerIdx]);
-                if (!its.IsValid()) continue;
-                ovlpArea += double(its.area());
-            }
+//             for (const auto &box : routers[j].localNet.routeGuides) {
+//                 const auto &its = box.IntersectWith(sr.routeGuides[box.layerIdx]);
+//                 if (!its.IsValid()) continue;
+//                 ovlpArea += double(its.area());
+//             }
 
-            if (ovlpArea/seqArea > 0.6 || ovlpArea/currArea > 0.6) {
-                assigned[j] = 1;
-                sr.routerIds.push_back(int(j));
-                sr.numV += routers[j].localNet.estimatedNumOfVertices;
-                // seqArea += (currArea - ovlpArea);
-                for (const auto &box : routers[j].localNet.routeGuides) {
-                    sr.bboxes[box.layerIdx] = sr.bboxes[box.layerIdx].UnionWith(box);
-                }
-                seqArea = 0;
-                for (const auto &box : sr.bboxes) seqArea += box.area();
-            }
-        }
-    }
+//             if (ovlpArea/seqArea > 0.6 || ovlpArea/currArea > 0.6) {
+//                 assigned[j] = 1;
+//                 sr.routerIds.push_back(int(j));
+//                 sr.numV += routers[j].localNet.estimatedNumOfVertices;
+//                 // seqArea += (currArea - ovlpArea);
+//                 for (const auto &box : routers[j].localNet.routeGuides) {
+//                     sr.routeGuides[box.layerIdx] = sr.routeGuides[box.layerIdx].UnionWith(box);
+//                 }
+//                 seqArea = 0;
+//                 for (const auto &box : sr.routeGuides) seqArea += box.area();
+//             }
+//         }
+//     }
 
-    printf("  SeqRouters : %d\n", int(seqRouters.size()));
-    for (const auto &sr : seqRouters)
-        printf("    %d, ", int(sr.routerIds.size()));
-    printf("\n");
-}
+// //     printf("  SeqRouters : %d\n", int(seqRouters.size()));
+// //     for (const auto &sr : seqRouters)
+// //         printf("    %d, ", int(sr.routerIds.size()));
+// //     printf("\n");
+// }
 
 void Router::route(const vector<int>& netsToRoute) {
     // init SingleNetRouters
@@ -283,6 +284,95 @@ void Router::route(const vector<int>& netsToRoute) {
         for (int id : netsToRoute) {
             for (auto root : database.nets[id].gridTopo) PartialRipup::removeCorners(root, id);
         }
+    }
+    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
+        printlog("allMazeMT", allMazeMT);
+        printlog("allCommitMT", allCommitMT);
+        printlog("allGetViaTypesMT", allGetViaTypesMT);
+        printlog("allCommitViaTypesMT", allCommitViaTypesMT);
+    }
+}
+
+void Router::greedyRoute() {
+    database.clearHisCost();
+    printf("\n\n --------------------------- \n Start final greedt route\n");
+    vector<int> netsToRoute = getNetsToRoute();
+    db::rrrIterSetting.adaptiveRipup = false;
+    db::rrrIterSetting.localRipup = true;
+    db::rrrIterSetting.greedyRoute = true;
+    partialRipup(netsToRoute);
+    vector<SingleNetRouter> routers;
+    routers.reserve(numPNets);
+    for (int i : netsToRoute) {
+        if (database.nets[i].pnets.empty())
+            routers.emplace_back(database.nets[i]);
+        else {
+            for (int pnet=0; pnet<int(database.nets[i].pnets.size()); pnet++) {
+                routers.emplace_back(database.nets[i]);
+                routers.back().localNet.pnetIdx = pnet;
+            }
+        }
+    }
+    auto preMT = runJobsMT(numPNets, [&](int netIdx) { routers[netIdx].preRoute(); });
+    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
+        printlog("preMT", preMT);
+    }
+    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
+        log() << "Start multi-thread scheduling. There are " << numPNets << " nets to route." << std::endl;
+    }
+    Scheduler scheduler(routers);
+    const vector<vector<int>>& batches = scheduler.schedule();
+    if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
+        log() << "Finish multi-thread scheduling" << ((db::setting.numThreads == 0) ? " using simple mode" : "")
+              << ". There will be " << batches.size() << " batches." << std::endl;
+        log() << std::endl;
+    }
+    int iBatch = 0;
+    MTStat allMazeMT, allCommitMT, allGetViaTypesMT, allCommitViaTypesMT;
+    for (const vector<int>& batch : batches) {
+        // 1 maze route
+        auto mazeMT = runJobsMT(batch.size(), [&](int jobIdx) {
+            auto& router = routers[batch[jobIdx]];
+            PartialRipup::removeDBEdges(router.localNet.pnetPins[0], router.dbNet.idx);
+            router.mazeRoute();
+            allNetStatus[router.dbNet.idx] = router.status;
+        });
+        allMazeMT += mazeMT;
+        // 2 commit nets to DB
+        auto commitMT = runJobsMT(batch.size(), [&](int jobIdx) {
+            auto& router = routers[batch[jobIdx]];
+            if (!db::isSucc(router.status)) return;
+            router.commitNetToDB();
+            router.localNet.pnetPins.clear();
+        });
+        allCommitMT += commitMT;
+        // 3 get via types
+        allGetViaTypesMT += runJobsMT(batch.size(), [&](int jobIdx) {
+            auto& router = routers[batch[jobIdx]];
+            if (!db::isSucc(router.status)) return;
+            PostRoute postRoute(router.dbNet);
+            postRoute.getViaTypes();
+        });
+        allCommitViaTypesMT += runJobsMT(batch.size(), [&](int jobIdx) {
+            auto& router = routers[batch[jobIdx]];
+            if (!db::isSucc(router.status)) return;
+            UpdateDB::commitViaTypes(router.dbNet);
+        });
+        // 4 stat
+        if (db::setting.multiNetVerbose >= +db::VerboseLevelT::HIGH && db::setting.numThreads != 0) {
+            int maxNumVertices = 0;
+            for (int i : batch) maxNumVertices = std::max(maxNumVertices, routers[i].localNet.estimatedNumOfVertices);
+            log() << "Batch " << iBatch << " done: size=" << batch.size() << ", mazeMT " << mazeMT << ", commitMT "
+                  << commitMT << ", peakM=" << utils::mem_use::get_peak() << ", maxV=" << maxNumVertices << std::endl;
+        }
+        iBatch++;
+    }
+    runJobsMT(netsToRoute.size(), [&](int id) {
+        auto &net = database.nets[id];
+        PostMazeRoute(net).run();
+    });
+    for (int id : netsToRoute) {
+        for (auto root : database.nets[id].gridTopo) PartialRipup::removeCorners(root, id);
     }
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {
         printlog("allMazeMT", allMazeMT);

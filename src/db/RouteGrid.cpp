@@ -449,14 +449,15 @@ CostT RouteGrid::getWireSegmentVioCost(const TrackSegment& ts, const int netIdx,
     // 1.1 Short
     iterateWireSegments(ts, netIdx, [&](const utils::IntervalT<int>& intvl, int usage) {
         DBU dist = layers[ts.layerIdx].getCrossPointRangeDistCost(intvl);
+        // int dist = intvl.high - intvl.low + 1;
         cost += unitShortVioCostDiscounted[ts.layerIdx] * usage * dist;
-        // cost += unitShortVioCostDiscounted[ts.layerIdx] * usage * (intvl.high - intvl.low);
     });
     // 1.2 Space
     cost += (unitSpaceVioCostDiscounted * getWireSegmentSpaceVioOnWires(ts, netIdx).size());
     // 2. Short or space vio with pins/obs
     iteratePoorWireSegments(ts, netIdx, [&](const utils::IntervalT<int>& intvl) {
         DBU dist = layers[ts.layerIdx].getCrossPointRangeDistCost(intvl);
+        // int dist = intvl.high - intvl.low + 1;
         cost += unitShortVioCost[ts.layerIdx] * dist * setting.dbPoorWirePenaltyCoeff;
     });
     // 3. With vias

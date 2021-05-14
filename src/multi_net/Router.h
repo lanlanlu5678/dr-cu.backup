@@ -23,5 +23,6 @@ private:
     // PARTIAL RIPUP
     int numPNets;
     void partialRipup(vector<int> &netsToRoute);
-    void assignSeqRouter(const vector<SingleNetRouter> &routers, vector<SeqRouter> &seqRouters)
+    void greedyRoute();
+    // void assignSeqRouter(const vector<SingleNetRouter> &routers, vector<SeqRouter> &seqRouters)
 };

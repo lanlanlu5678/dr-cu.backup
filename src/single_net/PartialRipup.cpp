@@ -89,18 +89,23 @@ void PartialRipup::extractPNets(vector<int> &vioNets) {
         });
     }
     else if (db::rrrIterSetting.adaptiveRipup) {
+        runJobsMT(database.nets.size(), [&](int id) {
+            mergeRouteGuides(database.nets[id]);
+        });
         runJobsMT(vioNets.size(), [&](int id) {
             auto &net = database.nets[vioNets[id]];
-            mergeRouteGuides(net);
+            // mergeRouteGuides(net);
             for (auto &g : net.mergedGuides)
                 database.expandBox(g, db::rrrIterSetting.defaultGuideExpand);
             markAdaptiveRipup(net);
         });
     }
 
-    for (int id : vioNets) {
-        for (auto proot : database.nets[id].pnets)
-            removeDBEdges(proot, id);
+    if (!db::rrrIterSetting.greedyRoute) {
+        for (int id : vioNets) {
+            for (auto proot : database.nets[id].pnets)
+                removeDBEdges(proot, id);
+        }
     }
 }
 
@@ -189,7 +194,7 @@ void PartialRipup::markLocalRipup(db::Net &net) {
     }
 
     for (auto root : net.gridTopo)
-        merge(root, 8);
+        mergeByGrids(root, 8);
     net.postOrderVisitGridTopo([&net](std::shared_ptr<db::GridSteiner> node) {
         if ((node->isVio) && (!(node->parent) || !(node->parent->isVio)))
             net.pnets.push_back(node);
@@ -242,6 +247,32 @@ inline void handleOutOfGuide(std::shared_ptr<db::GridSteiner> node,
     }
 }
 
+inline void dfs(db::GridSteiner *node,
+                db::GridSteiner *exit,
+                bool preIn,
+                const db::BoxOnLayer &g) {
+    const auto &np = database.getLoc(*node);
+    if (g.Contain(np)) {
+        node->isVio = true;
+        if (!preIn && exit != nullptr) {
+            node = node->parent.get();
+            while (node != exit) {
+                node->isVio = true;
+                node = node->parent.get();
+            }
+        }
+        preIn = true;
+    }
+    else {
+        if (preIn) exit = node;
+        preIn = false;
+    }
+
+    for (auto c : node->children) {
+        dfs(c.get(), exit, preIn, g);
+    }
+}
+
 void PartialRipup::markAdaptiveRipup(db::Net &net) {
     size_t guideSize = net.mergedGuides.size();
     vector<int> selected(guideSize, 0);
@@ -261,18 +292,24 @@ void PartialRipup::markAdaptiveRipup(db::Net &net) {
             handleOutOfGuide(vio, selected, net.mergedGuides);
         }
     }
-    net.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
-        const auto &np = database.getLoc(*node);
-        for (size_t i=0; i<guideSize; i++) {
-            if (selected[i] > 0 && net.mergedGuides[i].Contain(np)) {
-                node->isVio = true;
-                break;
-            }
+    // net.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
+    //     const auto &np = database.getLoc(*node);
+    //     for (size_t i=0; i<guideSize; i++) {
+    //         if (selected[i] > 0 && net.mergedGuides[i].Contain(np)) {
+    //             node->isVio = true;
+    //             break;
+    //         }
+    //     }
+    // });
+    for (size_t i=0; i<guideSize; i++) {
+        if (selected[i] == 0) continue;
+        for (auto root : net.gridTopo) {
+            dfs(root.get(), nullptr, false, net.mergedGuides[i]);
         }
-    });
+    }
 
     for (auto root : net.gridTopo)
-        merge(root, 40);
+        mergeByGrids(root, 40);
     net.postOrderVisitGridTopo([&net](std::shared_ptr<db::GridSteiner> node) {
         if ((node->isVio) && (!(node->parent) || !(node->parent->isVio)))
             net.pnets.push_back(node);
@@ -287,8 +324,8 @@ void mergePNetsInSubtrees(std::shared_ptr<db::GridSteiner> node, int thre) {
         }
 }
 
-void PartialRipup::merge(std::shared_ptr<db::GridSteiner> node, int thre) {
-    for (auto c : node->children) merge(c, thre);
+void PartialRipup::mergeByGrids(std::shared_ptr<db::GridSteiner> node, int thre) {
+    for (auto c : node->children) mergeByGrids(c, thre);
 
     int d = 64, d1 = 64, d2 = 64;
     db::GridSteiner *danger = nullptr;
@@ -316,11 +353,44 @@ void PartialRipup::merge(std::shared_ptr<db::GridSteiner> node, int thre) {
             node->distance = 0;
         }
         else {
-            if ((danger == nullptr) || (node->layerIdx != danger->layerIdx))
+            if (danger == nullptr)
                 node->distance = d1;
             else
                 node->distance = abs(node->crossPointIdx - danger->crossPointIdx) +
-                                    abs(node->trackIdx - danger->trackIdx) + d1;
+                                    abs(node->trackIdx - danger->trackIdx) +
+                                    abs(node->layerIdx - danger->layerIdx) + d1;
+        }
+    }
+}
+
+void PartialRipup::mergeByNodes(std::shared_ptr<db::GridSteiner> node, int thre) {
+    for (auto c : node->children) mergeByNodes(c, thre);
+
+    int d = 64, d1 = 64, d2 = 64;
+    
+    if (node->isVio) {
+        mergePNetsInSubtrees(node, thre);
+        node->distance = -1;
+    }
+    else {
+        for (auto c : node->children) {
+            d = c->distance;
+
+            if (d1 > d) {
+                d2 = d1;
+                d1 = d;
+            }
+            else if (d2 > d) {
+                d2 = d;
+            }
+        }
+
+        if (d1 + d2 < thre) {
+            mergePNetsInSubtrees(node, thre);
+            node->distance = 0;
+        }
+        else {
+            node->distance = d1 + 1;
         }
     }
 }

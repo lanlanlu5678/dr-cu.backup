@@ -32,11 +32,12 @@ public:
     // TODO: better way to differetiate same-layer and diff-layer girdPinAccessBoxes
     void getGridPinAccessBoxes(const Net& net, vector<vector<db::GridBoxOnLayer>>& gridPinAccessBoxes) const;
 
-    // Extended Content
-    vector<vector<utils::BoxT<DBU>>> obsBoxes;
+    // Extended Contents
+    // fundamental
     int getTrackEnd(int lidx) const { return layers[lidx].tracks.size() - 1; };
     int getCrossPointEnd(int lidx) const { return layers[lidx].crossPoints.size() - 1; };
     utils::BoxT<DBU> getWireBox(int layerIdx, utils::PointT<DBU> pu, utils::PointT<DBU> pv) const;
+    // pin link/via vio
     void getRoutedBox(GridBoxOnLayer &queryGrid,
                         vector<utils::BoxT<DBU>> &neiMetals,
                         int netIdx) const;
@@ -49,7 +50,18 @@ public:
     int countOvlp(const BoxOnLayer &box,
                             const vector<utils::BoxT<DBU>> &regions,
                             const vector<utils::BoxT<DBU>> &neiMetals) const;
+    // mar/macro
+    vector<vector<utils::BoxT<DBU>>> obsBoxes;
     utils::IntervalT<DBU> getEmptyRange(int layerIdx, int trackIdx, int cpIdx, int netIdx) const;
+    // mark routed vios
+    vector<std::pair<utils::IntervalT<int>, int>> getRoutedWiresOnTrackSeg(int l, int t, int clo, int chi) const;
+    vector<std::pair<utils::IntervalT<int>, int>> getPoorWiresOnTrackSeg(int l, int t, int clo, int chi) const;
+    utils::IntervalT<int> getWrieSpacingRange(int layerIdx, const utils::IntervalT<int> &wire) const;
+    vector<std::pair<int, int>> getViasOnTrackSeg(int l, int t, int clo, int chi) const;
+    vector<std::pair<int, int>> getLowerViasOnTrackSeg(int l, int t, int clo, int chi) const;
+    int getLowerCP(int lid, int t) const { return layers[lid].tracks[t].lowerCPIdx; };
+    CostT getSpaceVioDiscounted() const { return unitSpaceVioCostDiscounted; };
+    // greedy route
     void clearHisCost();
 
 private:

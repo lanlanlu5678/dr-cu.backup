@@ -84,7 +84,7 @@ public:
     bool adaptiveRipup = false;
     bool fullyRoute = true;
     bool greedyRoute = false;
-    bool constrainInGuides = true;
+    // bool constrainInGuides = true;
 };
 
 extern RrrIterSetting rrrIterSetting;

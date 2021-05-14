@@ -140,7 +140,7 @@ db::RouteStatus MazeRoute::route(int startPin) {
         if (!dstVertex) {
             // PARTIAL RIPUP
             printf("\n");
-            std::cout << " " << localNet.getName() << ";  pnet : " << localNet.pnetIdx << std::endl;
+            std::cout << " " << localNet.getName() << " - " << localNet.idx << ";  pnet : " << localNet.pnetIdx << std::endl;
             printf(" num of pins : %d\n", localNet.numOfPins());
             if (localNet.numOfPins() - 1 == nPinToConnect) {
                 printf(" have not reach any end pins.\n");
