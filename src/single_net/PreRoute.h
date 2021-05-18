@@ -20,5 +20,4 @@ private:
     // PARTIAL RIPUP
     db::RouteStatus localRipup();
     db::RouteStatus adaptiveRipup();
-    db::RouteStatus fullyRipup();
 };

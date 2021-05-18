@@ -35,6 +35,7 @@ public:
     void creatAdaptiveRouteGuides();
     void addDiffLayerRouteGuides();
     void getGridBoxes();
+    void replaceMacroPabs(vector<vector<db::GridBoxOnLayer>> &gboxes);
     // // debug
     // DBU ripupArea = 0;
 

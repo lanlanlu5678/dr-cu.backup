@@ -69,11 +69,6 @@ int Database::getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const
     }
 
     GridBoxOnLayer queryGridBox = rangeSearch(BoxOnLayer(lid, queryBox));
-    // queryGridBox.trackRange.low -= 1;
-    // queryGridBox.trackRange.high += 1;
-    // queryGridBox.crossPointRange.low -= 1;
-    // queryGridBox.crossPointRange.high += 1;
-    // getRoutedBox(queryGridBox, neiMetals, netIdx);
 
     if (!isValid(queryGridBox)) return countOvlp(box, regions, neiMetals);
 
@@ -352,49 +347,6 @@ utils::IntervalT<DBU> Database::getEmptyRange(int layerIdx, int trackIdx, int cp
     return availItl;
 }
 
-vector<std::pair<utils::IntervalT<int>, int>> Database::getRoutedWiresOnTrackSeg(int l, int t, int clo, int chi) const {
-    vector<std::pair<utils::IntervalT<int>, int>> results;
-    auto queryInterval = boost::icl::interval<int>::closed(clo, chi);
-    auto intervals = routedWireMap[l][t].equal_range(queryInterval);
-    for (auto it = intervals.first; it != intervals.second; ++it) {
-        for (int id : it->second)
-            results.push_back(std::make_pair(utils::IntervalT<int>(first(it->first), last(it->first)), id));
-    }
-    return results;
-}
-
-vector<std::pair<utils::IntervalT<int>, int>> Database::getPoorWiresOnTrackSeg(int l, int t, int clo, int chi) const {
-    vector<std::pair<utils::IntervalT<int>, int>> results;
-    auto queryInterval = boost::icl::interval<int>::closed(clo, chi);
-    auto intervals = poorWireMap[l][t].equal_range(queryInterval);
-    for (auto it = intervals.first; it != intervals.second; ++it) {
-        results.push_back(std::make_pair(utils::IntervalT<int>(first(it->first), last(it->first)), it->second.netIdx));
-    }
-    return results;
-}
-
-vector<std::pair<int, int>> Database::getViasOnTrackSeg(int l, int t, int clo, int chi) const {
-    vector<std::pair<int, int>> results;
-    auto lb = routedViaMap[l][t].lower_bound(clo), ub = routedViaMap[l][t].upper_bound(chi);
-    for (auto it=lb; it!=ub; it++) {
-        results.push_back({it->first, it->second});
-    }
-    return results;
-}
-
-vector<std::pair<int, int>> Database::getLowerViasOnTrackSeg(int l, int t, int clo, int chi) const {
-    vector<std::pair<int, int>> results;
-    auto lb = routedViaMapUpper[l][t].lower_bound(clo), ub = routedViaMapUpper[l][t].upper_bound(chi);
-    for (auto it=lb; it!=ub; it++) {
-        results.push_back({it->first, it->second});
-    }
-    return results;
-}
-
-utils::IntervalT<int> Database::getWrieSpacingRange(int layerIdx, const utils::IntervalT<int> &wire) const {
-    return {layers[layerIdx].wireRange[wire.low].low, layers[layerIdx].wireRange[wire.high].high};
-}
-
 void Database::clearHisCost() {
     histWireMap.clear();
     histViaMap.clear();
@@ -405,6 +357,5 @@ void Database::clearHisCost() {
         histViaMap[i].resize(layers[i].numTracks());
     }
 }
-
 }   // namespace db
 

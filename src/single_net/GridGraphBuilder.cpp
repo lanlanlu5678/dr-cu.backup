@@ -54,7 +54,7 @@ void GridGraphBuilder::run() {
     addWrongWayConn();
 
     // 5. Add intra-guide connection
-    for (unsigned b = 0; b < localNet.gridRouteGuides.size(); b++) connectGuide(b, maps);
+    for (unsigned b = 0; b < localNet.gridRouteGuides.size(); b++) connectGuide(b);
 
     setMinAreaFlags();
     addOutofPinPenalty();
@@ -371,84 +371,4 @@ int GridGraphBuilder::guideToVertex(int gIdx, int trackIdx, int cpIdx) const {
 int GridGraphBuilder::boxToVertex(const db::GridBoxOnLayer &box, int pointBias, int trackIdx, int cpIdx) const {
     return pointBias + (trackIdx - box.trackRange.low) * (box.crossPointRange.range() + 1) +
            (cpIdx - box.crossPointRange.low);
-}
-
-void GridGraphBuilder::getWireVioGrids(vector<std::map<int, std::set<int>>> &maps) {
-    maps.resize(database.getLayerNum());
-
-    for (const auto &g : localNet.gridRouteGuides) {
-        int lid = g.layerIdx, loT = g.trackRange.low, hiT = g.trackRange.high,
-            loCP = g.crossPointRange.low, hiCP = g.crossPointRange.high,
-            loType = -1, upType = -1, xSize = 0, ySize = 0;
-        const auto &layer = database.getLayer(lid);
-        const auto &cutLayer = database.getCutLayer(lid);
-        if (lid > 0) loType = database.getCutLayer(lid-1).defaultViaType().idx;
-        if (lid < database.getLayerNum() - 1) upType = cutLayer.defaultViaType().idx;
-
-        for (int t=loT; t<=hiT; t++) {
-            // routed wires
-            const auto &wires = database.getRoutedWiresOnTrackSeg(lid, t, loCP, hiCP);
-            for (const auto &wire : wires) {
-                if (wire.second == localNet.idx) continue;
-                const auto &range = database.getWrieSpacingRange(lid, wire.first);
-                for (int c=range.low; c<=range.high; c++) {
-                    auto it = maps[lid].find(t);
-                    if (it == maps[lid].end()) maps[lid].insert({t, {c}});
-                    else it->second.insert(c);
-                }
-            }
-            // poor wires
-            const auto &poorWires = database.getPoorWiresOnTrackSeg(lid, t, loCP, hiCP);
-            for (const auto &poorWire : poorWires) {
-                if (poorWire.second == localNet.idx) continue;
-                for (int c=poorWire.first.low; c<=poorWire.first.high; c++) {
-                    auto it = maps[lid].find(t);
-                    if (it == maps[lid].end()) maps[lid].insert({t, {c}});
-                    else it->second.insert(c);
-                }
-            }
-            // lower vias
-            if (loType > -1) {
-                const auto &loVias = database.getLowerViasOnTrackSeg(lid, t, loCP, hiCP);
-                for (const auto &vialoc : loVias) {
-                    if (vialoc.second == localNet.idx) continue;
-                    const db::ViaType *type = database.getViaType(database.getLower(db::GridPoint(lid, t, vialoc.first)));
-                    const auto &lut = type->viaTopWire[vialoc.first];
-                    xSize = lut.size(); ySize = lut[0].size();
-                    int offsetX = t - xSize/2, offsetY = vialoc.first - ySize/2;
-                    for (int x=0; x<xSize; x++) {
-                        for (int y=0; y<ySize; y++) {
-                            int st = offsetX + x, sc = offsetY + y;
-                            if (lut[x][y]) {
-                                auto it = maps[lid].find(st);
-                                if (it == maps[lid].end()) maps[lid].insert({st, {sc}});
-                                else it->second.insert(sc);
-                            }
-                        }
-                    }
-                }
-            }
-            // upper vias
-            if (upType > -1) {
-                const auto &upVias = database.getViasOnTrackSeg(lid, t, loCP, hiCP);
-                for (const auto &vialoc : upVias) {
-                    if (vialoc.second == localNet.idx) continue;
-                    const db::ViaType *type = database.getViaType({lid, t, vialoc.first});
-                    const auto &lut = type->viaBotWire[vialoc.first];
-                    xSize = lut.size(); ySize = lut[0].size();
-                    int offsetX = t - xSize/2, offsetY = vialoc.first - ySize/2;
-                    for (int x=0; x<xSize; x++) {
-                        for (int y=0; y<ySize; y++) {
-                            int st = offsetX + x, sc = offsetY + y;
-                            if (lut[x][y]) {
-                                auto it = maps[lid].find(st);
-                                if (it == maps[lid].end()) maps[lid].insert({st, {sc}});
-                                else it->second.insert(sc);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

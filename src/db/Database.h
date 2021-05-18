@@ -53,14 +53,6 @@ public:
     // mar/macro
     vector<vector<utils::BoxT<DBU>>> obsBoxes;
     utils::IntervalT<DBU> getEmptyRange(int layerIdx, int trackIdx, int cpIdx, int netIdx) const;
-    // mark routed vios
-    vector<std::pair<utils::IntervalT<int>, int>> getRoutedWiresOnTrackSeg(int l, int t, int clo, int chi) const;
-    vector<std::pair<utils::IntervalT<int>, int>> getPoorWiresOnTrackSeg(int l, int t, int clo, int chi) const;
-    utils::IntervalT<int> getWrieSpacingRange(int layerIdx, const utils::IntervalT<int> &wire) const;
-    vector<std::pair<int, int>> getViasOnTrackSeg(int l, int t, int clo, int chi) const;
-    vector<std::pair<int, int>> getLowerViasOnTrackSeg(int l, int t, int clo, int chi) const;
-    int getLowerCP(int lid, int t) const { return layers[lid].tracks[t].lowerCPIdx; };
-    CostT getSpaceVioDiscounted() const { return unitSpaceVioCostDiscounted; };
     // greedy route
     void clearHisCost();
 

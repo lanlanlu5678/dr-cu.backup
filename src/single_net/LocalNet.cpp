@@ -18,6 +18,7 @@ void LocalNet::initGridBoxes() {
 
     // init gridPinAccessBoxes
     database.getGridPinAccessBoxes(dbNet, gridPinAccessBoxes);
+    replaceMacroPabs(gridPinAccessBoxes);
     for (unsigned pinIdx = 0; pinIdx != numOfPins(); ++pinIdx) {
         pinAccessBoxes[pinIdx].clear(); 
         for (auto& box : gridPinAccessBoxes[pinIdx]) {
@@ -458,6 +459,7 @@ void LocalNet::getGridBoxes() {
     // pin access boxes
     vector<vector<db::GridBoxOnLayer>> gridBoxes;
     database.getGridPinAccessBoxes(dbNet, gridBoxes);
+    replaceMacroPabs(gridBoxes);
     gridPinAccessBoxes.resize(pnetPins.size());
     for (size_t i=0; i<pnetPins.size(); i++) {
         // if (pnetPins[i]->children.empty() || pnetPins[i]->parent == nullptr) {
@@ -512,6 +514,37 @@ void LocalNet::addDiffLayerRouteGuides() {
             if (bl > 2) routeGuides.emplace_back(bl - 1, box);
             if (bl < (lnum - 1)) routeGuides.emplace_back(bl + 1, box);
             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
+        }
+    }
+}
+
+void LocalNet::replaceMacroPabs(vector<vector<db::GridBoxOnLayer>> &gboxes) {
+    for (size_t i=0; i<dbNet.pinAccessBoxes.size(); i++) {
+        if (!dbNet.rsynPins[i].isMacroBlockPin()) continue;
+        gboxes[i].clear();
+        for (auto pab : dbNet.pinAccessBoxes[i]) {
+            DBU halfWidth = database.getLayer(pab.layerIdx).width / 2,
+                pitch = database.getLayer(pab.layerIdx).pitch;
+            for (const auto &obs : database.obsBoxes[pab.layerIdx]) {
+                if (obs.HasIntersectWith(pab)) {
+                    for (int d=0; d<2; d++) {
+                        if (pab[d].low == obs[d].low)
+                            pab[d].low -= pitch * 2;
+                        else pab[d].low += halfWidth;
+
+                        if (pab[d].high == obs[d].high)
+                            pab[d].high += pitch * 2;
+                        else pab[d].high -= halfWidth;
+                    }
+                    break;
+                }
+            }
+            const auto &g = database.rangeSearch(pab);
+            if (!db::rrrIterSetting.fullyRoute && !database.isValid(g)) {
+                printf(" net %d pnet %d pin %d : ", idx, pnetIdx, int(i));
+                std::cout << g << "; " << pab << std::endl;
+            }
+            gboxes[i].push_back(g);
         }
     }
 }

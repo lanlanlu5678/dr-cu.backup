@@ -20,7 +20,4 @@ private:
 
     int guideToVertex(int gIdx, int trackIdx, int cpIdx) const;
     int boxToVertex(const db::GridBoxOnLayer& box, int pointBias, int trackIdx, int cpIdx) const;
-
-    // shared
-    void getWireVioGrids(vector<std::map<int, std::set<int>>> &map);
 };
