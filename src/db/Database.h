@@ -44,9 +44,10 @@ public:
     void getFixedBox(const BoxOnLayer &queryBox,
                         vector<utils::BoxT<DBU>> &neiMetals,
                         int netIdx) const;
+    bool hasVioGridlessRoutedMetal(int netIdx, const BoxOnLayer &box) const;
     bool hasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const;
     void debugHasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const;
-    int getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const;
+    int getPinLinkVio(const BoxOnLayer& box, int netIdx) const;
     int countOvlp(const BoxOnLayer &box,
                             const vector<utils::BoxT<DBU>> &regions,
                             const vector<utils::BoxT<DBU>> &neiMetals) const;

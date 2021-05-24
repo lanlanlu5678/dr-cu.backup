@@ -15,7 +15,7 @@ void extractVias(int treeId,
                     vector<std::pair<int, int>> &closeVias,
                     vector<std::map<int, std::map<int, int>>> &vias) {
     node->distance = treeId;
-    if (node->viaType != nullptr) {
+    if (node->viaType != nullptr && !(node->fakePin)) {
         auto lower = node->layerIdx > node->parent->layerIdx ? node->parent : node;
         int viaId = allVias.size();
         allVias.push_back(node);

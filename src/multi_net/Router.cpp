@@ -231,13 +231,23 @@ void Router::route(const vector<int>& netsToRoute) {
         }
         iBatch++;
     }
-    if (!db::rrrIterSetting.fullyRoute) {
+    if (iter > 0) {
         runJobsMT(netsToRoute.size(), [&](int id) {
             auto &net = database.nets[netsToRoute[id]];
             PostMazeRoute(net).run();
             PostProcess::removeSameNetVioVias(net);
             // for (auto root : net.gridTopo)
             //     PostProcess::removeCorners(root, net.idx);
+        });
+    }
+    else {
+        runJobsMT(netsToRoute.size(), [&](int id) {
+            auto &net = database.nets[netsToRoute[id]];
+            PartialRipup::mergeRouteGuides(net);
+            net.routeGuideVios.resize(net.routeGuides.size(), 0);
+            net.gridRouteGuides.clear();
+            for (const auto &g : net.routeGuides)
+                net.gridRouteGuides.push_back(database.rangeSearch(g));
         });
     }
     if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE) {

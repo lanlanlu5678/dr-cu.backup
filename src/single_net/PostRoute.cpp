@@ -1,5 +1,6 @@
 #include "PostRoute.h"
 #include "PinTapConnector.h"
+#include "PinAccessHandler.h"
 
 void PostRoute::getPinTapPoints() {
     dbNet.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
@@ -15,7 +16,8 @@ db::RouteStatus PostRoute::run() {
     getPinTapPoints();
 
     pinViaPatches.resize(dbNet.numOfPins());
-    status = connectPins();
+    // status = connectPins();
+    status = finalConnPins();
     if (!db::isSucc(status)) {
         return status;
     }
@@ -26,41 +28,46 @@ db::RouteStatus PostRoute::run() {
     return status;
 }
 
-db::RouteStatus PostRoute::connectPins(bool final) {
+db::RouteStatus PostRoute::connectPins() {
     db::RouteStatus netStatus = db::RouteStatus::SUCC_NORMAL;
 
-    // vector<vector<std::shared_ptr<db::GridSteiner>>> samePinTaps(dbNet.numOfPins());
-
-        // if (final && dbNet.getName() == "net20457") {
-        //     for (int i=0; i<dbNet.numOfPins(); i++) {
-        //         printf("  %d : ", i);
-        //         for (auto p : pinTaps) {
-        //             if (p->pinIdx != i) continue;
-        //             const auto &ploc = database.getLoc(*p);
-        //             std::cout << p->layerIdx << " " << ploc;
-        //             printf(" isVia:%d;  ", int(p->viaType==nullptr));
-        //             if (p->parent == nullptr) continue;
-        //             const auto &pp = database.getLoc(*(p->parent));
-        //             std::cout << p->parent->layerIdx << " " << pp;
-        //         }
-        //         printf("\n");
-        //     }
-        // }
-
     for (auto tap : pinTaps) {
-        // if (final && dbNet.idx > 79900) {
-        //     std::cout << *tap << " via null : " << int(tap->viaType == nullptr) << std::endl;
-        // }
-        if (final && (handlePinVia(*tap) || handleMacroPins(*tap))) {
-        // if (final && handlePinVia(*tap)) {
-            // if (dbNet.idx > 79900) printf(" succ handle\n");
-            continue;
-        }
         PinTapConnector pinTapConnector(*tap, dbNet, tap->pinIdx);
         netStatus &= pinTapConnector.run();
         if (!pinTapConnector.bestLink.empty()) {
             linkToPins[tap] = move(pinTapConnector.bestLink);
-            // samePinTaps[tap->pinIdx].push_back(tap);  // only consider those with links
+            if (pinTapConnector.bestVio > 0) {
+                db::routeStat.increment(db::RouteStage::POST, db::MiscRouteEvent::LINK_PIN_VIO, 1);
+            }
+        }
+        if (pinTapConnector.bestLinkVia.first != -1) {
+            linkViaToPins[tap] = pinTapConnector.bestLinkVia;
+            linkViaTypes[tap] = nullptr;
+        }
+    }
+
+    if (!db::isSucc(netStatus)) {
+        printWarnMsg(netStatus, dbNet);
+    }
+
+    return netStatus;
+}
+
+db::RouteStatus PostRoute::finalConnPins() {
+    db::RouteStatus netStatus = db::RouteStatus::SUCC_NORMAL;
+    for (auto tap : pinTaps) {
+        PinAccessHandler handler(dbNet, tap.get(), this);
+        handler.run();
+        if (handler.yes)
+            continue;
+        PinTapConnector pinTapConnector(*tap, dbNet, tap->pinIdx);
+        if (tap->viaType && tap->layerIdx == 0) {
+            const auto &bot = tap->viaType->bot;
+            pinTapConnector.dir = bot.x.range() > bot.y.range() ? 1 : 0;
+        }
+        netStatus &= pinTapConnector.run();
+        if (!pinTapConnector.bestLink.empty()) {
+            linkToPins[tap] = move(pinTapConnector.bestLink);
             if (pinTapConnector.bestVio > 0) {
                 db::routeStat.increment(db::RouteStage::POST, db::MiscRouteEvent::LINK_PIN_VIO, 1);
             }
@@ -81,7 +88,7 @@ db::RouteStatus PostRoute::connectPins(bool final) {
 void PostRoute::getViaTypes() {
     db::RouteStatus status = db::RouteStatus::SUCC_NORMAL;
     getPinTapPoints();
-    status = connectPins(false);
+    status = connectPins();
     if (!db::isSucc(status)) {
         return;
     }
@@ -249,9 +256,10 @@ void PostRoute::getTopo() {
     // fill
     for (const std::tuple<int, std::unordered_set<unsigned>, vector<utils::BoxT<DBU>>> &subTreeMetal : subTreeMetals) {
         if (std::get<2>(subTreeMetal).empty()) continue;
-        const db::AggrParaRunSpace aggressiveSpacing =
-            std::get<1>(subTreeMetal).empty() ? db::AggrParaRunSpace::DEFAULT : db::AggrParaRunSpace::LARGER_WIDTH;
-        MetalFiller metalFiller(std::get<2>(subTreeMetal), std::get<0>(subTreeMetal), aggressiveSpacing);
+        // const db::AggrParaRunSpace aggressiveSpacing =
+        //     std::get<1>(subTreeMetal).empty() ? db::AggrParaRunSpace::DEFAULT : db::AggrParaRunSpace::LARGER_WIDTH;
+        // MetalFiller metalFiller(std::get<2>(subTreeMetal), std::get<0>(subTreeMetal), aggressiveSpacing);
+        MetalFiller metalFiller(std::get<2>(subTreeMetal), std::get<0>(subTreeMetal), db::AggrParaRunSpace::DEFAULT);
         metalFiller.run();
         for (const utils::BoxT<DBU> &rect : metalFiller.fillMetals)
             database.writeDEFFillRect(dbNet, rect, std::get<0>(subTreeMetal));

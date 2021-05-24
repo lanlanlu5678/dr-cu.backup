@@ -1,7 +1,6 @@
 #include "PinTapConnector.h"
 
 db::RouteStatus PinTapConnector::run() {
-    // 0 Try shift via
     const auto &layer = database.getLayer(tap.layerIdx);
     const auto &tapXY = database.getLoc(tap);
 
@@ -13,12 +12,16 @@ db::RouteStatus PinTapConnector::run() {
     }
 
     // 2 Get tapsOnPin
-    std::vector<utils::PointT<DBU>> tapsOnPin;
+    // std::vector<utils::PointT<DBU>> tapsOnPin;
+    utils::PointT<DBU> tapOnPin;
     if (bestBox.layerIdx != tap.layerIdx) {
-        tapsOnPin.emplace_back(bestBox.cx(), bestBox.cy());
+        // tapsOnPin.emplace_back(bestBox.cx(), bestBox.cy());
+        tapOnPin.x = bestBox.cx();
+        tapOnPin.y = bestBox.cy();
         // also need a via
         bestLinkVia.first = min(bestBox.layerIdx, tap.layerIdx);
-        bestLinkVia.second = tapsOnPin[0];
+        // bestLinkVia.second = tapsOnPin[0];
+        bestLinkVia.second = tapOnPin;
     } else {
         // // a tap within a pin access box
         // if (min(bestBox.width(), bestBox.height()) > layer.widthForSuffOvlp) {
@@ -28,20 +31,22 @@ db::RouteStatus PinTapConnector::run() {
         // }
         // route "into" a pin access box
         shrinkBox(bestBox, std::max<DBU>(layer.shrinkForSuffOvlp, layer.width * 0.5));
-        tapsOnPin.push_back(bestBox.GetNearestPointTo(tapXY));
+        // tapsOnPin.push_back(bestBox.GetNearestPointTo(tapXY));
+        tapOnPin = bestBox.GetNearestPointTo(tapXY);
     }
 
     // 3 Get candidateLinks
     vector<vector<utils::SegmentT<DBU>>> candidateLinks;
-    for (auto tapOnPin : tapsOnPin) {
+    // for (auto tapOnPin : tapsOnPin) {
         utils::PointT<DBU> turn1(tapXY.x, tapOnPin.y), turn2(tapOnPin.x, tapXY.y);
-        if (layer.direction == Y) {
+        // if (layer.direction == Y) {
+        if (dir == 1 || (dir < 0 && layer.direction == Y)) {
             // prefer routing from tap on track first (to avoid uncontrolled violations with vias)
             std::swap(turn1, turn2);
         }
         candidateLinks.push_back(getLinkFromPts({tapXY, turn1, tapOnPin}));
         candidateLinks.push_back(getLinkFromPts({tapXY, turn2, tapOnPin}));
-    }
+    // }
 
     // 4 Get bestLink
     bestVio = std::numeric_limits<int>::max();
@@ -87,8 +92,7 @@ int PinTapConnector::getLinkPinSpaceVio(const vector<utils::SegmentT<DBU>> &link
     for (const auto &linkSeg : link) {
         auto linkMetal = getLinkMetal(linkSeg, layerIdx);
         // numVio += database.getFixedMetalVio({layerIdx, linkMetal}, dbNet.idx);
-        numVio += database.getPinLinkVio({layerIdx, linkMetal}, dbNet.idx, false);
-        // if (
+        numVio += database.getPinLinkVio({layerIdx, linkMetal}, dbNet.idx);
     }
     return numVio;
 }
@@ -149,29 +153,4 @@ utils::BoxT<DBU> PinTapConnector::getLinkMetal(const utils::SegmentT<DBU> &link,
         box[d].high += halfWidth;
     }
     return box;
-}
-
-utils::BoxT<DBU> PinTapConnector::getPinViaPatch(const utils::BoxT<DBU> &viaBox, const db::BoxOnLayer &connBox) {
-    DBU margin = 0, width = database.getLayer(connBox.layerIdx).width;
-    utils::BoxT<DBU> result;
-    int dir = 0;
-    const auto &its = viaBox.IntersectWith(connBox);
-    if (its.x.range() < width && its.y.range() < width) {
-        if (viaBox.x.range() > viaBox.y.range()) {
-            margin = its.x.range();
-        }
-        else {
-            dir = 1;
-            margin = its.y.range();
-        }
-        margin = width - margin;
-        if (margin > 0) {
-            result = viaBox;
-            if (its[dir].low == viaBox[dir].low)
-                result[dir].low -= margin;
-            else
-                result[dir].high += margin;
-        }
-    }
-    return result;
 }

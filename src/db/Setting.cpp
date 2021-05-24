@@ -27,16 +27,18 @@ void RrrIterSetting::update(int iter) {
         addDiffLayerGuides = false;
     } else {
         defaultGuideExpand += iter * 2;
-        wrongWayPointDensity = std::min(1.0, wrongWayPointDensity + 0.1);
+        // wrongWayPointDensity = std::min(1.0, wrongWayPointDensity + 0.1);
 
         // PARTIAL RIPUP
         if (iter == 1) {
             fullyRoute = false;
             localRipup = true;
+            wrongWayPointDensity = 0.8;
         }
         else if (iter == 2) {
             localRipup = false;
             adaptiveRipup = true;
+            wrongWayPointDensity = 0.5;
         }
         // else {
             // defaultGuideExpand = iter;

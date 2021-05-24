@@ -8,6 +8,7 @@ public:
     std::pair<int, utils::PointT<DBU>> bestLinkVia = {-1, {}};
 
     int bestVio = 0;
+    int dir = -1;
 
     PinTapConnector(const db::GridPoint& pinTap, const db::Net& databaseNet, int pinIndex)
         : tap(pinTap), dbNet(databaseNet), pinIdx(pinIndex) {}

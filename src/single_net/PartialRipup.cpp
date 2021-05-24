@@ -61,27 +61,18 @@ void PartialRipup::mergeRouteGuides(db::Net &net) {
             }
         }
     }
+    net.routeGuides.clear();
     for (int l=0; l<database.getLayerNum(); l++) {
         if (guides[l].empty()) continue;
         for (const auto &guide : guides[l]) {
             if (guide.IsValid()) {
-                net.mergedGuides.emplace_back(l, guide);
-                int vio = 0;
-                for (size_t i=0; i<net.routeGuides.size(); i++) {
-                    if (net.routeGuides[i].layerIdx != l) continue;
-                    if (guide.HasIntersectWith(net.routeGuides[i]))
-                        vio += net.routeGuideVios[i];
-                }
-                net.mergedVios.push_back(vio);
+                net.routeGuides.emplace_back(l, guide);
             }
         }
     }
 }
 
 void PartialRipup::extractPNets(vector<int> &vioNets) {
-    // if (db::setting.multiNetVerbose >= +db::VerboseLevelT::MIDDLE)
-    //     log() << "Extracting pseudo nets from violated nets " << std::endl;
-
     if (db::rrrIterSetting.localRipup) {
         runJobsMT(vioNets.size(), [&](int id) {
             auto &net = database.nets[vioNets[id]];
@@ -89,14 +80,8 @@ void PartialRipup::extractPNets(vector<int> &vioNets) {
         });
     }
     else if (db::rrrIterSetting.adaptiveRipup) {
-        runJobsMT(database.nets.size(), [&](int id) {
-            mergeRouteGuides(database.nets[id]);
-        });
         runJobsMT(vioNets.size(), [&](int id) {
             auto &net = database.nets[vioNets[id]];
-            // mergeRouteGuides(net);
-            for (auto &g : net.mergedGuides)
-                database.expandBox(g, db::rrrIterSetting.defaultGuideExpand);
             markAdaptiveRipup(net);
         });
     }
@@ -113,7 +98,7 @@ void PartialRipup::markLocalRipup(db::Net &net) {
     for (auto vio : net.vioNodes) {
         int layerIdx = vio->layerIdx;
         db::GridBoxOnLayer gbox(layerIdx, {vio->trackIdx-7, vio->trackIdx+7},
-                                {vio->crossPointIdx-20, vio->crossPointIdx+20});
+                                {vio->crossPointIdx-30, vio->crossPointIdx+30});
         if (gbox.trackRange.low < 0) gbox.trackRange.low = 0;
         if (gbox.crossPointRange.low < 0) gbox.crossPointRange.low = 0;
         gbox.trackRange.high = min(database.getTrackEnd(layerIdx), gbox.trackRange.high);
@@ -201,118 +186,81 @@ void PartialRipup::markLocalRipup(db::Net &net) {
     });
 }
 
-inline void handleOutOfGuide(std::shared_ptr<db::GridSteiner> node,
-                                vector<int> &selected,
-                                const vector<db::BoxOnLayer> &guides) {
-    // upwards
-    auto up = node;
-    bool out = true;
-    size_t gsize = guides.size();
-    while (out && up->parent) {
-        up = up->parent;
-        up->isVio = true;
-        const auto &upp = database.getLoc(*up);
-        for (size_t i=0; i<gsize; i++) {
-            if (guides[i].layerIdx == up->layerIdx &&
-                guides[i].Contain(upp)) {
-                selected[i]++;
-                out = false;
-                break;
-            }
+inline bool selectGuide(int lid,
+                        const utils::PointT<DBU> &loc,
+                        const vector<db::BoxOnLayer> &guides,
+                        vector<int> &selected) {
+    for (size_t i=0; i<guides.size(); i++) {
+        if (guides[i].layerIdx == lid && guides[i].Contain(loc)) {
+            selected[i]++;
+            return true;
         }
     }
-
-    // downwards
-    vector<db::GridSteiner *> children, grandChildren;
-    children.push_back(node.get());
-    while (!children.empty()) {
-        for (auto p : children) {
-            p->isVio = true;
-            for (auto c : p->children) {
-                out = true;
-                const auto &cp = database.getLoc(*c);
-                for (size_t i=0; i<gsize; i++) {
-                    if (guides[i].layerIdx == c->layerIdx &&
-                        guides[i].Contain(cp)) {
-                        selected[i]++;
-                        out = false;
-                        break;
-                    }
-                }
-                if (out)
-                    grandChildren.push_back(c.get());
-            }
-        }
-        children = move(grandChildren);
-    }
+    return false;
 }
 
 inline void dfs(db::GridSteiner *node,
-                db::GridSteiner *exit,
-                bool preIn,
-                const db::BoxOnLayer &g) {
-    const auto &np = database.getLoc(*node);
-    if (g.Contain(np)) {
-        node->isVio = true;
-        if (!preIn && exit != nullptr) {
-            node = node->parent.get();
-            while (node != exit) {
-                node->isVio = true;
-                node = node->parent.get();
-            }
-        }
-        preIn = true;
-    }
-    else {
-        if (preIn) exit = node;
-        preIn = false;
-    }
-
+                const vector<db::BoxOnLayer> &guides,
+                vector<int> &selected) {
     for (auto c : node->children) {
-        dfs(c.get(), exit, preIn, g);
+        if (!c->isVio &&
+            !selectGuide(c->layerIdx, database.getLoc(*c), guides, selected))
+            dfs(c.get(), guides, selected);
+        c->isVio = true;
     }
 }
 
 void PartialRipup::markAdaptiveRipup(db::Net &net) {
-    size_t guideSize = net.mergedGuides.size();
+    // size_t guideSize = net.mergedGuides.size();
+    size_t guideSize = net.routeGuides.size();
+    auto mguides = net.routeGuides;
+    for (size_t i=0; i<guideSize; i++) {
+        if (net.routeGuideVios[i] >= 4)
+            database.expandBox(mguides[i], 8);
+        else
+            database.expandBox(mguides[i], 5);
+    }
     vector<int> selected(guideSize, 0);
     for (auto vio : net.vioNodes) {
-        const auto &vp = database.getLoc(*vio);
-        bool out = true;
-        for (size_t i=0; i<guideSize; i++) {
-            const auto &gbox = net.mergedGuides[i];
-            if (gbox.layerIdx == vio->layerIdx &&
-                gbox.Contain(vp)) {
-                selected[i]++;
-                out = false;
-                break;
+        if (!selectGuide(vio->layerIdx, database.getLoc(*vio), mguides, selected)) {
+            auto up = vio->parent.get();
+            while (up) {
+                up->isVio = true;
+                if (selectGuide(up->layerIdx, database.getLoc(*up), mguides, selected))
+                    break;
+                up = up->parent.get();
             }
-        }
-        if (out) {
-            handleOutOfGuide(vio, selected, net.mergedGuides);
+            dfs(vio.get(), mguides, selected);
         }
     }
-    // net.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
-    //     const auto &np = database.getLoc(*node);
-    //     for (size_t i=0; i<guideSize; i++) {
-    //         if (selected[i] > 0 && net.mergedGuides[i].Contain(np)) {
-    //             node->isVio = true;
-    //             break;
-    //         }
-    //     }
-    // });
     for (size_t i=0; i<guideSize; i++) {
-        if (selected[i] == 0) continue;
-        for (auto root : net.gridTopo) {
-            dfs(root.get(), nullptr, false, net.mergedGuides[i]);
+        if (selected[i] > 0) {
+            const auto &g = mguides[i];
+            net.postOrderVisitGridTopo([&g](std::shared_ptr<db::GridSteiner> node) {
+                if (g.Contain(database.getLoc(*node)))
+                    node->isVio = true;
+            });
         }
     }
-
     for (auto root : net.gridTopo)
         mergeByGrids(root, 40);
-    net.postOrderVisitGridTopo([&net](std::shared_ptr<db::GridSteiner> node) {
-        if ((node->isVio) && (!(node->parent) || !(node->parent->isVio)))
-            net.pnets.push_back(node);
+    // make sure ppins are in guide
+    net.postOrderVisitGridTopo([&](std::shared_ptr<db::GridSteiner> node) {
+        if (node->isVio) {
+            if (node->parent == nullptr)
+                net.pnets.push_back(node);
+            else if (!(node->parent->isVio)) {
+                if (!selectGuide(node->layerIdx, database.getLoc(*node), mguides, selected))
+                    node->parent->isVio = true;
+                else
+                    net.pnets.push_back(node);
+            }
+        }
+        else if (node->parent && node->parent->isVio) {
+            auto p = node->parent.get();
+            if (!selectGuide(p->layerIdx, database.getLoc(*p), mguides, selected))
+                dfs(p, mguides, selected);
+        }
     });
 }
 

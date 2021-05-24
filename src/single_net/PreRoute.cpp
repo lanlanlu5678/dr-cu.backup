@@ -8,23 +8,23 @@ db::RouteStatus PreRoute::run(int numPitchForGuideExpand) {
         database.expandBox(guides[i], numPitchForGuideExpand);
     }
 
-    // add diff-layer guides
-    if (db::rrrIterSetting.addDiffLayerGuides) {
-        int oriSize = guides.size();
-        for (int i = 0; i < oriSize; ++i) {
-            int j = guides[i].layerIdx;
-            if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres) {
-                if (j > 2) guides.emplace_back(j - 1, guides[i]);  // do not add to layers 0, 1
-                if ((j + 1) < database.getLayerNum()) guides.emplace_back(j + 1, guides[i]);
-                db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
-            }
-            if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres * 2) {
-                if (j > 3) guides.emplace_back(j - 2, guides[i]);  // do not add to layers 0, 1
-                if ((j + 2) < database.getLayerNum()) guides.emplace_back(j + 2, guides[i]);
-                db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
-            }
-        }
-    }
+    // // add diff-layer guides
+    // if (db::rrrIterSetting.addDiffLayerGuides) {
+    //     int oriSize = guides.size();
+    //     for (int i = 0; i < oriSize; ++i) {
+    //         int j = guides[i].layerIdx;
+    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres) {
+    //             if (j > 2) guides.emplace_back(j - 1, guides[i]);  // do not add to layers 0, 1
+    //             if ((j + 1) < database.getLayerNum()) guides.emplace_back(j + 1, guides[i]);
+    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_1, 1);
+    //         }
+    //         if (localNet.dbNet.routeGuideVios[i] >= db::setting.diffLayerGuideVioThres * 2) {
+    //             if (j > 3) guides.emplace_back(j - 2, guides[i]);  // do not add to layers 0, 1
+    //             if ((j + 2) < database.getLayerNum()) guides.emplace_back(j + 2, guides[i]);
+    //             db::routeStat.increment(db::RouteStage::PRE, db::MiscRouteEvent::ADD_DIFF_LAYER_GUIDE_2, 1);
+    //         }
+    //     }
+    // }
 
     // expand guides by cross layer connection
     expandGuidesToMargin();
@@ -81,7 +81,6 @@ db::RouteStatus PreRoute::runIterative() {
         status = localRipup();
     else if (db::rrrIterSetting.adaptiveRipup && localNet.pnetIdx >= 0)
         status = adaptiveRipup();
-    // else 
 
     switch (status) {
         case +db::RouteStatus::FAIL_DETACHED_GUIDE:
@@ -259,15 +258,18 @@ db::RouteStatus PreRoute::localRipup() {
     }
     // route guides
     localNet.routeGuides.clear();
-    for (size_t i=0; i<localNet.pnetPins.size(); i++) {
-        if (localNet.pnetPins[i]->pinIdx < 0) continue;
-        utils::BoxT<DBU> box;
-        for (const auto &pbox : localNet.pinAccessBoxes[i]) {
-            box = box.UnionWith(pbox);
-        }
-        localNet.routeGuides.push_back({localNet.pinAccessBoxes[i][0].layerIdx, box});
-    }
     localNet.creatLocalRouteGuides();
+    size_t gsize = localNet.routeGuides.size();
+    for (size_t i=0; i<localNet.pnetPins.size(); i++) {
+        if (localNet.pinAccessBoxes[i][0].area() == 0) continue;
+        for (size_t j=0; j<gsize; j++) {
+            auto &g = localNet.routeGuides[j];
+            for (const auto &pab : localNet.pinAccessBoxes[i]) {
+                if (g.layerIdx == pab.layerIdx && g.HasIntersectWith(pab))
+                    g.Set(g.layerIdx, g.UnionWith(pab));
+            }
+        }
+    }
     expandGuidesToMargin();
     auto &gs = localNet.routeGuides;
     size_t rsize = gs.size();
@@ -275,9 +277,8 @@ db::RouteStatus PreRoute::localRipup() {
     for (size_t i=0; i<rsize; i++) {
         const auto &g = gs[i];
         int l = g.layerIdx;
-        // if (l > 2) routeGuides.emplace_back(l-1, g);
         if (db::rrrIterSetting.greedyRoute) {
-            if (l > 1) gs.emplace_back(l-1, g);
+            if (l > 2) gs.emplace_back(l-1, g);
             if (l < lnum) gs.emplace_back(l+1, g);
         }
         else {

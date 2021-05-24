@@ -179,6 +179,7 @@ int LocalNet::getCrossPointPenalty(int guideIdx, int trackIdx, int cpIdx) const 
 // PARITAL RIPUP
 void LocalNet::traverse(std::shared_ptr<db::GridSteiner> node) {
     bool isPin = node->pinIdx >= 0;
+    node->distance = -1;
     for (auto c : node->children) {
         if (c->isVio)
             traverse(c);
@@ -209,21 +210,28 @@ void LocalNet::initPNetPins() {
     pinAccessBoxes.clear();
     pinAccessBoxes.resize(pnetPins.size());
     for (size_t i=0; i<pnetPins.size(); i++) {
-        if (pnetPins[i]->pinIdx < 0 || pnetPins[i]->children.size() > 0) {
-            pinAccessBoxes[i].emplace_back(pnetPins[i]->layerIdx, database.getLoc(*(pnetPins[i])));
-        }
+        auto p = pnetPins[i].get();
+        bool notfix = true;
+        if (p->pinIdx < 0 || (p->parent && !p->parent->isVio)) notfix = false;
         else {
-            pinAccessBoxes[i] = dbNet.pinAccessBoxes[pnetPins[i]->pinIdx];
+            for (auto c : p->children) {
+                if (!c->isVio)
+                    notfix = false;
+            }
         }
+        if (notfix)
+            pinAccessBoxes[i] = dbNet.pinAccessBoxes[p->pinIdx];
+        pinAccessBoxes[i].emplace_back(p->layerIdx, database.getLoc(*(p)));
     }
 }
 
 inline void printndoes(std::shared_ptr<db::GridSteiner> node) {
-    const auto &np = database.getLoc(*node);
-    std::cout << "  " << node->layerIdx << ", " << np << ";  pinIdx : " << node->pinIdx
-                << "; vio : " << int(node->isVio) << std::endl;
+    // const auto &np = database.getLoc(*node);
+    // std::cout << "  " << node->layerIdx << ", " << np << ";  pinIdx : " << node->pinIdx
+    //             << "; vio : " << int(node->isVio) << std::endl;
+    std::cout << *node << "; " << node->distance << std::endl;
     for (auto c : node->children) {
-        // if (c->isVio)
+        if (c->isVio)
             printndoes(c);
     }
 }
@@ -264,147 +272,133 @@ void LocalNet::creatLocalRouteGuides() {
     // }
 }
 
-void selectGuides(db::GridSteiner *node,
-                    vector<int> &selected,
-                    std::set<size_t> &breaks,
-                    const vector<db::BoxOnLayer> &guides) {
-    const auto &np = database.getLoc(*node);
-    bool currentOut = true;
+inline bool inGuide(db::GridSteiner *node, const vector<db::BoxOnLayer> &guides) {
+    const auto &nloc = database.getLoc(*node);
     for (size_t i=0; i<guides.size(); i++) {
-        if (guides[i].layerIdx == node->layerIdx && guides[i].Contain(np)) {
-            selected[i] += 1;
+        if (guides[i].layerIdx == node->layerIdx && guides[i].Contain(nloc)) {
             node->distance = int(i);
-            currentOut = false;
-            break;
+            return true;
         }
     }
+    return false;
+}
 
-    if (currentOut) {
-        node->distance = -1;
-        if (node->parent) {
-            const auto &pp = database.getLoc(*(node->parent));
-            for (size_t i=0; i<guides.size(); i++) {
-                if (guides[i].layerIdx == node->parent->layerIdx &&
-                    guides[i].Contain(pp)) {
-                    breaks.insert(i);
-                    break;
-                }
-            }
-        }
-        for (auto c : node->children) {
-            const auto &cp = database.getLoc(*c);
-            for (size_t i=0; i<guides.size(); i++) {
-                if (guides[i].layerIdx == c->layerIdx &&
-                    guides[i].Contain(cp)) {
-                    breaks.insert(i);
-                    break;
-                }
-            }
-        }
+inline void selectGuides(db::GridSteiner *node,
+                            int preOut,
+                            vector<int> &selected,
+                            vector<std::pair<int, int>> &breaks,
+                            const vector<db::BoxOnLayer> &guides) {
+    if (inGuide(node, guides) || node->distance >= 0) {
+        selected[node->distance]++;
+        // if (node->parent && node->parent->distance < 0)
+        if (preOut > 0)
+            breaks.emplace_back(preOut, node->distance);
     }
-
+    // else if (node->parent && node->parent->distance >= 0)
+    //     breaks.emplace_back(node->parent->distance, -1);
+    else if (preOut == -1) preOut = node->parent->distance;
+    
     for (auto c : node->children) {
-        if (c->isVio) selectGuides(c.get(), selected, breaks, guides);
+        if (c->isVio) {
+            selectGuides(c.get(), preOut, selected, breaks, guides);
+        }
     }
 }
 
 void LocalNet::creatAdaptiveRouteGuides() {
-    const auto &mguides = dbNet.mergedGuides;
-    size_t msize = mguides.size();
-    vector<int> selected(mguides.size(), 0), svios;
-    std::set<size_t> breaks;
+    // const auto &mguides = dbNet.mergedGuides;
+    // size_t msize = mguides.size();
+    size_t msize = routeGuides.size();
+    for (size_t i=0; i<msize; i++) {
+        if (dbNet.routeGuideVios[i] >= 4)
+            database.expandBox(routeGuides[i], 8);
+        else
+            database.expandBox(routeGuides[i], 5);
+    }
+    vector<int> selected(msize, 0), svios;
+    vector<std::pair<int, int>> breaks;
     vector<db::BoxOnLayer> pickedGuides;
-    selectGuides(pnetPins[0].get(), selected, breaks, mguides);
 
-    if (!breaks.empty()) {
-        size_t root = *(breaks.begin());
-        breaks.erase(root);
-        vector<size_t> curr, next, ends;
-        curr.push_back(root);
-        std::unordered_set<size_t> visitedGuides;
-        std::unordered_map<size_t, size_t> parent;
-
-        if (breaks.empty()) {
-            for (auto p : pnetPins) {
-                if (p->distance > -1 || p->pinIdx < 0) continue;
-                DBU mindist = 10000, dist = 0;
-                size_t minid = 0;
-                const auto &ploc = database.getLoc(*p);
-                for (size_t i=0; i<mguides.size(); i++) {
-                    if (mguides[i].layerIdx != p->layerIdx) continue;
-                    dist = utils::Dist(mguides[i], ploc);
-                    if (dist < mindist) {
-                        mindist = dist;
-                        minid = i;
-                    }
-                }
-                breaks.insert(minid);
-                pickedGuides.push_back(mguides[minid]);
-                pickedGuides.back().Update(ploc);
-            }
-        }
-
-        while (!breaks.empty() && !curr.empty()) {
-            for (size_t i : curr) {
-                const auto &gi = mguides[i];
-                for (size_t j=0; j<msize; j++) {
-                    if (visitedGuides.count(j)) continue;
-                    const auto &gj = mguides[j];
-                    if (abs(gi.layerIdx-gj.layerIdx) == 1 &&
-                        gi.HasIntersectWith(gj)) {
-                        parent.insert({j, i});
-                        visitedGuides.insert(j);
-                        if (breaks.count(j)) {breaks.erase(j); ends.push_back(j);}
-                        next.push_back(j);
-                    }
-                }
-            }
-            curr = move(next);
-        }
-        for (auto i : ends) {
-            while (i != root) {
-                selected[parent[i]]++;
-                i = parent[i];
-            }
-        }
-    }
-    for (size_t i=0; i<mguides.size(); i++) {
-        if (selected[i] > 0) {
-            pickedGuides.push_back(mguides[i]);
-            svios.push_back(dbNet.mergedVios[i]);
-        }
-    }
-    // ensure connectivity
+    // select route guides
     for (size_t i=0; i<pnetPins.size(); i++) {
-        auto p = pnetPins[i];
-        if (p->distance > -1 || p->pinIdx >= 0) continue;
-        int lid = p->layerIdx;
-        DBU dist = 0, mindist = std::numeric_limits<DBU>::max();
-        size_t closest = 100000;
-        const auto &pp = database.getLoc(*p);
-        printf(" Warning : net %d pnet %d pin %d not real pin but out of guide\n", idx, pnetIdx, int(i));
-        for (size_t i=0; i<pickedGuides.size(); i++) {
-            if (abs(pickedGuides[i].layerIdx-p->layerIdx) < 2) {
-                dist = utils::Dist(pickedGuides[i], pp);
-                if (dist < mindist) {
-                    mindist = dist;
-                    closest = i;
+        if (pnetPins[i]->pinIdx >=0 && !inGuide(pnetPins[i].get(), routeGuides)) {
+            printf(" WARNING : net %d pin %d out of guide\n", idx, pnetPins[i]->pinIdx);
+            for (const auto &pab : pinAccessBoxes[i]) {
+                for (size_t j=0; j<msize; j++) {
+                    auto &g = routeGuides[j];
+                    if (g.layerIdx == pab.layerIdx && g.HasIntersectWith(pab)) {
+                        g.Set(g.layerIdx, g.UnionWith(pab));
+                        pnetPins[i]->distance = int(j);
+                        break;
+                    }
                 }
-                break;
+            }
+            if (pnetPins[i]->distance < 0) {
+                printf(" ERROR : net %d pin %d totally out of guide\n", idx, pnetPins[i]->pinIdx);
+                std::cout << pinAccessBoxes[i] << std::endl;
+                std::cout << dbNet.pinAccessBoxes[pnetPins[i]->pinIdx] << std::endl;
+                std::cout << routeGuides << std::endl;
             }
         }
-        if (closest < 100000) {
-            const auto &layer = database.getLayer(lid);
-            DBU margin = layer.pitch * 20;
-            int dir = 1 - layer.direction;
-            auto patch = pickedGuides[closest];
-            patch.Update(pp);
-            patch.layerIdx = lid;
-            patch[dir].low = max<DBU>(patch[dir].low, pp[dir]-margin);
-            patch[dir].high = min<DBU>(patch[dir].high, pp[dir]+margin);
-            pickedGuides.push_back(patch);
+    }
+    selectGuides(pnetPins[0].get(), -1, selected, breaks, routeGuides);
+    for (size_t i=0; i<pnetPins.size(); i++) {
+        if (pnetPins[i]->distance < 0)
+            printf(" ERROR : net %d pnet %d pin %d (%d) out of guide\n", idx, pnetIdx, pnetPins[i]->pinIdx, int(i));
+    }
+    
+    // ensure connectivity
+    if (!breaks.empty()) {
+        vector<int> curr, next;
+        std::unordered_set<int> visitedGuides;
+        std::unordered_map<int, int> parent;
+        for (const auto &pair : breaks) {
+            visitedGuides.insert(pair.first);
+            curr.push_back(pair.first);
+            while (!curr.empty()) {
+                for (int id : curr) {
+                    for (int i=0; i<msize; i++) {
+                        if (visitedGuides.count(i)) continue;
+                        if (abs(routeGuides[id].layerIdx-routeGuides[i].layerIdx) < 2 &&
+                            routeGuides[id].HasIntersectWith(routeGuides[i])) {
+                            next.push_back(i);
+                            visitedGuides.insert(i);
+                            parent.insert({i, id});
+                        }
+                    }
+                }
+                if (visitedGuides.count(pair.second))
+                    next.clear();
+                curr = move(next);
+            }
+            if (visitedGuides.count(pair.second)) {
+                int currId = pair.second;
+                while (parent.count(currId)) {
+                    currId = parent[currId];
+                    selected[currId]++;
+                }
+            }
+            else {
+                printf(" ERROR : net %d pnet %d open : %d, %d\n", idx, pnetIdx, pair.first, pair.second);
+                printndoes(pnetPins[0]);
+                for (size_t i=0; i<msize; i++) {
+                    std::cout << i << " : " << routeGuides[i] << std::endl;
+                }
+            }
+            visitedGuides.clear();
+            parent.clear();
         }
     }
+
+    for (size_t i=0; i<msize; i++) {
+        if (selected[i] > 0) {
+            // pickedGuides.push_back(mguides[i]);
+            pickedGuides.push_back(routeGuides[i]);
+            // svios.push_back(dbNet.mergedVios[i]);
+            svios.push_back(dbNet.routeGuideVios[i]);
+        }
+    }
+
     // slice route guide
     for (auto p : pnetPins) {
         db::GridSteiner *nei = nullptr;
@@ -420,18 +414,11 @@ void LocalNet::creatAdaptiveRouteGuides() {
         if (nei == nullptr || nei->layerIdx != p->layerIdx) continue;
         const auto &pp = database.getLoc(*p);
         const auto &np = database.getLoc(*nei);
-        for (auto &box : pickedGuides) {
-            if (box.layerIdx == p->layerIdx && box.Contain(pp)) {
-                if (box.Contain(np)) {
-                    int dir = 1 - database.getLayerDir(box.layerIdx);
-                    // DBU dist = pp[dir] - box[dir].low;
-                    // if (dist > box[dir].range() * 0.3 || dist < box[dir].range() * 0.7)
-                    //     break;
-                    if (np[dir] < pp[dir]) box[dir].low = pp[dir];
-                    else if (np[dir] > pp[dir]) box[dir].high = pp[dir];
-                }
-                break;
-            }
+        auto &box = routeGuides[p->distance];
+        if ((box.x.range() > 20000 || box.y.range() > 20000) && box.Contain(np)) {
+            int dir = 1 - database.getLayerDir(box.layerIdx);
+            if (np[dir] < pp[dir]) box[dir].low = pp[dir];
+            else if (np[dir] > pp[dir]) box[dir].high = pp[dir];
         }
     }
     routeGuides = move(pickedGuides);
@@ -465,8 +452,9 @@ void LocalNet::getGridBoxes() {
         // if (pnetPins[i]->children.empty() || pnetPins[i]->parent == nullptr) {
         //     if (pnetPins[i]->pinIdx < 0)
         //         printf("net %d pnetIdx %d pnet %ld is not pin but have no children\n", idx, pnetIdx, i);
-        if (pnetPins[i]->pinIdx < 0 || pnetPins[i]->children.size() > 0)
+        if (pinAccessBoxes[i][0].area() == 0) {
             gridPinAccessBoxes[i].push_back(database.rangeSearch(pinAccessBoxes[i][0]));
+        }
         else {
             gridPinAccessBoxes[i] = move(gridBoxes[pnetPins[i]->pinIdx]);
             pinAccessBoxes[i].clear();

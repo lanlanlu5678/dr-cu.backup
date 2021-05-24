@@ -140,7 +140,7 @@ db::RouteStatus MazeRoute::route(int startPin) {
         if (!dstVertex) {
             // PARTIAL RIPUP
             printf("\n");
-            std::cout << " " << localNet.getName() << " - " << localNet.idx << ";  pnet : " << localNet.pnetIdx << std::endl;
+            std::cout << " " << localNet.dbNet.getName() << " - " << localNet.idx << ";  pnet : " << localNet.pnetIdx << std::endl;
             printf(" num of pins : %d\n", localNet.numOfPins());
             if (localNet.numOfPins() - 1 == nPinToConnect) {
                 printf(" have not reach any end pins.\n");
@@ -181,9 +181,9 @@ db::RouteStatus MazeRoute::route(int startPin) {
             printf(" route guides\n");
             for (size_t i=0; i<localNet.routeGuides.size(); i++)
                 log() << " " << i << " " << localNet.routeGuides[i] << std::endl;
-            printf(" merged guides\n");
-            for (size_t i=0; i<localNet.dbNet.mergedGuides.size(); i++)
-                log() << " " << i << " " << localNet.dbNet.mergedGuides[i] << std::endl;
+            // printf(" merged guides\n");
+            // for (size_t i=0; i<localNet.dbNet.mergedGuides.size(); i++)
+            //     log() << " " << i << " " << localNet.dbNet.mergedGuides[i] << std::endl;
             printf("\n");
             printWarnMsg(db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH, localNet.dbNet);
             return db::RouteStatus::FAIL_DISCONNECTED_GRID_GRAPH;

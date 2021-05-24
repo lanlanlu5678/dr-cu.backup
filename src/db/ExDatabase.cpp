@@ -40,7 +40,7 @@ int Database::countOvlp(const BoxOnLayer &box,
     return numOvlp;
 }
 
-int Database::getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const {
+int Database::getPinLinkVio(const BoxOnLayer& box, int netIdx) const {
     int lid = box.layerIdx;
     const auto &regions = getAccurateMetalRectForbidRegions(box);
     utils::BoxT<DBU> queryBox = box;
@@ -54,22 +54,10 @@ int Database::getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const
     }
 
     // fixed metal
-    boostBox rtreeQueryBox(boostPoint(queryBox.x.low, queryBox.y.low), boostPoint(queryBox.x.high, queryBox.y.high));
-    vector<std::pair<boostBox, int>> queryResults;
-    fixedMetals[lid].query(bgi::intersects(rtreeQueryBox), std::back_inserter(queryResults));
     vector<utils::BoxT<DBU>> neiMetals;
-    for (const auto& queryResult : queryResults) {
-        if (queryResult.second != netIdx) {
-            const auto& b = queryResult.first;
-            neiMetals.emplace_back(bg::get<bg::min_corner, 0>(b),
-                                    bg::get<bg::min_corner, 1>(b),
-                                    bg::get<bg::max_corner, 0>(b),
-                                    bg::get<bg::max_corner, 1>(b));
-        }
-    }
+    getFixedBox({0, queryBox}, neiMetals, netIdx);
 
     GridBoxOnLayer queryGridBox = rangeSearch(BoxOnLayer(lid, queryBox));
-
     if (!isValid(queryGridBox)) return countOvlp(box, regions, neiMetals);
 
     // routed metal (via only)
@@ -110,16 +98,6 @@ int Database::getPinLinkVio(const BoxOnLayer& box, int netIdx, bool debug) const
         }
     }
 
-    if (debug) {
-        log() << " ------ getPinLinkVio ------ " << std::endl;
-        log() << "   forbid regions for : " << box << std::endl;
-        for (const auto &region : regions)
-            log() << "      " << region << std::endl;
-        log() << "   neiMetals : " << std::endl;
-        for (const auto &nm : neiMetals)
-            log() << "      " << nm << std::endl;
-    }
-
     return countOvlp(box, regions, neiMetals);
 }
 
@@ -145,9 +123,9 @@ void Database::getRoutedBox(GridBoxOnLayer &queryGrid,
         int low = lid - 1;
         via.layerIdx = low;
         const auto &lowerGrid = getLower(queryGrid);
-        // lc = max(0, lowerGrid.crossPointRange.low),
-        // uc = min(layers[low].numCrossPoints() - 1, lowerGrid.crossPointRange.high);
-        for (int t=lowerGrid.trackRange.low; t<=lowerGrid.trackRange.high; t++) {
+        lc = max(0, lowerGrid.crossPointRange.low - 1),
+        uc = min(layers[low].numCrossPoints() - 1, lowerGrid.crossPointRange.high + 1);
+        for (int t=lowerGrid.trackRange.low-1; t<=lowerGrid.trackRange.high+1; t++) {
             via.trackIdx = t;
             auto itLo = routedViaMap[low][t].lower_bound(lc);
             auto itHi = routedViaMap[low][t].upper_bound(uc);
@@ -191,6 +169,18 @@ void Database::getRoutedBox(GridBoxOnLayer &queryGrid,
             }
         }
     }
+}
+
+bool Database::hasVioGridlessRoutedMetal(int netIdx, const BoxOnLayer &box) const {
+    auto qg = database.rangeSearch(box);
+    qg.trackRange.low -= 1;
+    qg.trackRange.high += 1;
+    qg.crossPointRange.low -= 1;
+    qg.crossPointRange.high += 1;
+    vector<utils::BoxT<DBU>> neiMetals;
+    getRoutedBox(qg, neiMetals, netIdx);
+    const auto &regions = getAccurateMetalRectForbidRegions(box);
+    return countOvlp(box, regions, neiMetals);
 }
 
 void Database::getFixedBox(const BoxOnLayer &queryBox,
@@ -258,47 +248,47 @@ bool Database::hasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, 
     return false;
 }
 
-void Database::debugHasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const {
-    const auto &cp = layers[layerIdx].crossPoints;
-    int lc = getSurroundingCrossPoint(1, cl).low - 1,
-        uc = getSurroundingCrossPoint(1, cu).high + 1,
-        dir = 1 - layers[layerIdx].direction;
-    DBU botViaSpace = layers[layerIdx].maxEolSpace + cutLayers[0].defaultViaType().top[dir].high,
-        topViaSpace = layers[layerIdx].maxEolSpace + cutLayers[layerIdx].defaultViaType().bot[dir].high,
-        wireSpace = layers[layerIdx].maxEolSpace + layers[layerIdx].width * 0.5;
-    printf("\n cl : %ld,     cu : %ld,   bvs : %ld,     tvs : %ld,      ws : %ld\n", cl, cu, botViaSpace, topViaSpace, wireSpace);
+// void Database::debugHasVioRoutedMetalOnTrack(int netIdx, int layerIdx, int trackIdx, DBU cl, DBU cu) const {
+//     const auto &cp = layers[layerIdx].crossPoints;
+//     int lc = getSurroundingCrossPoint(1, cl).low - 1,
+//         uc = getSurroundingCrossPoint(1, cu).high + 1,
+//         dir = 1 - layers[layerIdx].direction;
+//     DBU botViaSpace = layers[layerIdx].maxEolSpace + cutLayers[0].defaultViaType().top[dir].high,
+//         topViaSpace = layers[layerIdx].maxEolSpace + cutLayers[layerIdx].defaultViaType().bot[dir].high,
+//         wireSpace = layers[layerIdx].maxEolSpace + layers[layerIdx].width * 0.5;
+//     printf("\n cl : %ld,     cu : %ld,   bvs : %ld,     tvs : %ld,      ws : %ld\n", cl, cu, botViaSpace, topViaSpace, wireSpace);
 
-    // wire
-    printf("    wires:\n");
-    auto queryItvl = boost::icl::interval<int>::closed(lc, uc);
-    auto itvls = routedWireMap[1][trackIdx].equal_range(queryItvl);
-    for (auto it=itvls.first; it!=itvls.second; it++) {
-        for (int id : it->second) {
-            if (id != netIdx) {
-                std::cout << printf(" l: %ld, u: %ld\n", cp[first(it->first)].location, cp[last(it->first)].location);
-            }
-        }
-    }
+//     // wire
+//     printf("    wires:\n");
+//     auto queryItvl = boost::icl::interval<int>::closed(lc, uc);
+//     auto itvls = routedWireMap[1][trackIdx].equal_range(queryItvl);
+//     for (auto it=itvls.first; it!=itvls.second; it++) {
+//         for (int id : it->second) {
+//             if (id != netIdx) {
+//                 std::cout << printf(" l: %ld, u: %ld\n", cp[first(it->first)].location, cp[last(it->first)].location);
+//             }
+//         }
+//     }
 
-    // via
-    printf("    same layer vias:\n");
-    auto lb = routedViaMap[layerIdx][trackIdx].lower_bound(lc);
-    auto ub = routedViaMap[layerIdx][trackIdx].upper_bound(uc);
-    for (auto it=lb; it!=ub; it++) {
-        if (it->second != netIdx) {
-            std::cout << printf(" v: %ld\n", cp[it->first].location);
-        }
-    }
-    printf("    lower layer vias:\n");
-    lb = routedViaMapUpper[layerIdx][trackIdx].lower_bound(lc);
-    ub = routedViaMapUpper[layerIdx][trackIdx].upper_bound(uc);
-    for (auto it=lb; it!=ub; it++) {
-        if (it->second != netIdx) {
-            std::cout << printf(" v: %ld\n", cp[it->first].location);
-        }
-    }
-    printf("\n");
-}
+//     // via
+//     printf("    same layer vias:\n");
+//     auto lb = routedViaMap[layerIdx][trackIdx].lower_bound(lc);
+//     auto ub = routedViaMap[layerIdx][trackIdx].upper_bound(uc);
+//     for (auto it=lb; it!=ub; it++) {
+//         if (it->second != netIdx) {
+//             std::cout << printf(" v: %ld\n", cp[it->first].location);
+//         }
+//     }
+//     printf("    lower layer vias:\n");
+//     lb = routedViaMapUpper[layerIdx][trackIdx].lower_bound(lc);
+//     ub = routedViaMapUpper[layerIdx][trackIdx].upper_bound(uc);
+//     for (auto it=lb; it!=ub; it++) {
+//         if (it->second != netIdx) {
+//             std::cout << printf(" v: %ld\n", cp[it->first].location);
+//         }
+//     }
+//     printf("\n");
+// }
 
 utils::IntervalT<DBU> Database::getEmptyRange(int layerIdx, int trackIdx, int cpIdx, int netIdx) const {
     const auto &layer = layers[layerIdx];

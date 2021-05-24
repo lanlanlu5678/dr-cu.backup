@@ -2,8 +2,12 @@
 
 #include "LocalNet.h"
 
+class PinAccessHandler;
+
 class PostRoute {
 public:
+    friend PinAccessHandler;
+
     PostRoute(db::Net& databaseNet) : dbNet(databaseNet) {}
     
     db::RouteStatus run();
@@ -22,7 +26,8 @@ private:
     void getPinTapPoints();
 
     // 2. Connect taps to pins by L-shape links
-    db::RouteStatus connectPins(bool final = true);
+    db::RouteStatus connectPins();
+    db::RouteStatus finalConnPins();
 
     // 3. Get final topo (with metal fill)
     void getTopo();
@@ -39,10 +44,10 @@ private:
     const db::ViaType* getViaType(std::shared_ptr<db::GridSteiner> u, std::shared_ptr<db::GridSteiner> v, int pinIdx);
     utils::BoxT<DBU> getWireSegmentMetal(const db::GridEdge& edge);
 
-    bool handlePinVia(const db::GridSteiner &tap);
-    bool shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type, const vector<size_t> &cidx);
-    bool safeShift(const db::GridSteiner &tap);
-    bool handleMacroPins(const db::GridSteiner &tap);
+    // bool handlePinVia(const db::GridSteiner &tap);
+    // bool shiftPinVia(const db::GridSteiner &tap, const db::ViaType *type, const vector<size_t> &cidx);
+    // bool safeShift(const db::GridSteiner &tap);
+    // bool handleMacroPins(const db::GridSteiner &tap);
 };
 
 class MetalFiller {
